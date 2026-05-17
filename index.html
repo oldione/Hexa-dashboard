@@ -282,6 +282,34 @@ select.fi{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.o
 .toast{position:fixed;bottom:24px;right:24px;background:var(--text);color:#fff;font-size:13px;font-weight:700;padding:12px 20px;border-radius:12px;z-index:999;opacity:0;transform:translateY(8px);transition:all .25s;pointer-events:none}
 .toast.show{opacity:1;transform:none}
 
+/* ─── INCOME CALC ─── */
+.fi-wrap{position:relative;display:flex;align-items:center;gap:0}
+.fi-wrap .fi{flex:1;border-radius:var(--r) 0 0 var(--r)!important}
+.fi-calc-btn{height:44px;padding:0 13px;background:var(--teal);border:1.5px solid var(--teal);border-left:none;border-radius:0 var(--r) var(--r) 0;color:#fff;font-size:16px;cursor:pointer;transition:background .15s;flex-shrink:0;display:flex;align-items:center;justify-content:center}
+.fi-calc-btn:hover{background:var(--teal2)}
+.fi-preview{font-size:11px;font-weight:700;margin-top:4px;height:16px;transition:all .2s}
+.fi-preview.ok{color:var(--green)}
+.fi-preview.err{color:var(--red)}
+.fi-preview.plain{color:var(--text3)}
+/* Calc popup */
+.calc-popup{position:absolute;top:calc(100% + 6px);left:0;right:0;background:var(--white);border:1.5px solid var(--teal);border-radius:var(--rl);box-shadow:0 12px 40px rgba(14,160,154,.2);z-index:1000;padding:14px;display:none}
+.calc-popup.open{display:block}
+.calc-popup-title{font-size:10px;font-weight:800;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:10px}
+.calc-lines{display:flex;flex-direction:column;gap:6px;margin-bottom:10px;max-height:160px;overflow-y:auto}
+.calc-line{display:flex;align-items:center;gap:6px}
+.calc-line input{flex:1;padding:7px 10px;border:1.5px solid var(--border2);border-radius:8px;font-size:13px;font-family:'Nunito',sans-serif;font-weight:700;background:var(--bg2);color:var(--text);outline:none;min-width:0;transition:border .14s}
+.calc-line input:focus{border-color:var(--teal);background:var(--white)}
+.calc-line input::placeholder{color:var(--text3);font-weight:600}
+.calc-line .rm{width:26px;height:26px;border:none;background:var(--red-bg);color:var(--red);border-radius:6px;font-size:14px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;transition:background .14s}
+.calc-line .rm:hover{background:var(--red);color:#fff}
+.calc-total{background:var(--bg2);border-radius:10px;padding:10px 12px;display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.calc-total-lbl{font-size:11px;font-weight:800;color:var(--text3);text-transform:uppercase;letter-spacing:.06em}
+.calc-total-val{font-family:'Space Grotesk',sans-serif;font-size:18px;font-weight:700;color:var(--teal2)}
+.calc-actions{display:flex;gap:7px}
+.calc-add-line{flex:1;padding:7px;background:var(--bg2);border:1.5px dashed var(--border2);border-radius:8px;font-size:12px;font-weight:700;color:var(--text2);cursor:pointer;font-family:'Nunito',sans-serif;transition:all .15s;text-align:center}
+.calc-add-line:hover{border-color:var(--teal);color:var(--teal2);background:var(--white)}
+.calc-apply{padding:7px 16px;background:var(--teal);border:none;border-radius:8px;font-size:12px;font-weight:800;color:#fff;cursor:pointer;font-family:'Nunito',sans-serif;transition:background .15s}
+.calc-apply:hover{background:var(--teal2)}
 ::-webkit-scrollbar{width:5px;height:5px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:var(--border2);border-radius:10px}::-webkit-scrollbar-thumb:hover{background:var(--teal)}
 
 /* ─── RESPONSIVE ─── */
@@ -498,7 +526,26 @@ select.fi{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.o
       </div>
       <div class="fr">
         <div class="fg"><label>Тип проекта</label><input class="fi" id="ft" placeholder="CS skins, AI market..."></div>
-        <div class="fg"><label>Доход (USDT) *</label><input class="fi" id="fi" type="number" min="0" placeholder="0"></div>
+        <div class="fg" style="position:relative">
+          <label>Доход (USDT) *</label>
+          <div class="fi-wrap">
+            <input class="fi" id="fi" type="text" placeholder="0 или 5000+1000" oninput="onIncomeInput()" onblur="onIncomeBlur()">
+            <button class="fi-calc-btn" type="button" onclick="toggleCalcPopup(event)" title="Калькулятор сложения">＋</button>
+          </div>
+          <div class="fi-preview" id="fi-preview"></div>
+          <div class="calc-popup" id="calc-popup">
+            <div class="calc-popup-title">Сложить суммы</div>
+            <div class="calc-lines" id="calc-lines"></div>
+            <div class="calc-total">
+              <span class="calc-total-lbl">Итого</span>
+              <span class="calc-total-val" id="calc-total-val">$0</span>
+            </div>
+            <div class="calc-actions">
+              <button class="calc-add-line" type="button" onclick="addCalcLine()">+ Добавить сумму</button>
+              <button class="calc-apply" type="button" onclick="applyCalc()">Применить</button>
+            </div>
+          </div>
+        </div>
       </div>
       <div class="fr">
         <div class="fg"><label>Доп. расход / правки ($)</label><input class="fi" id="fd" type="number" min="0" placeholder="0"></div>
@@ -985,6 +1032,8 @@ function openAdd(){
   document.getElementById('mtitle').textContent='Добавить проект';
   ['fs','fc','ft'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('fi').value='';
+  document.getElementById('fi-preview').textContent='';
+  document.getElementById('fi-preview').className='fi-preview';
   document.getElementById('fd').value='';
   document.getElementById('fw').checked=false;
   document.getElementById('fstatus').value='';
@@ -1006,6 +1055,7 @@ function openEdit(){
   document.getElementById('fc').value=p.client;
   document.getElementById('ft').value=p.type||'';
   document.getElementById('fi').value=p.income;
+  onIncomeInput();
   document.getElementById('fd').value=p.dop||'';
   document.getElementById('fw').checked=!!p.warn;
   document.getElementById('fstatus').value=p.status||'';
@@ -1024,10 +1074,11 @@ function ovc(e){if(e.target===document.getElementById('ov'))closeM()}
 function save(){
   const site=document.getElementById('fs').value.trim();
   const client=document.getElementById('fc').value.trim();
-  const income=parseFloat(document.getElementById('fi').value);
+  const incomeRaw=document.getElementById('fi').value;
+  const income=evalIncome(incomeRaw);
   if(!site){document.getElementById('ferr').textContent='Укажи домен';return}
   if(!client){document.getElementById('ferr').textContent='Укажи клиента';return}
-  if(isNaN(income)||income<0){document.getElementById('ferr').textContent='Укажи доход';return}
+  if(income===null||income<0){document.getElementById('ferr').textContent='Укажи корректный доход';return}
   const months=MONTHS.map((m,i)=>({month:m,hours:n(parseFloat(document.getElementById('mh'+i).value)||0)}));
   const obj={
     id:eid||uid(),site,client,
@@ -1297,6 +1348,126 @@ document.addEventListener('keydown',e=>{
   }
 });
 
+
+// ─── INCOME CALCULATOR ──────────────────────────────────────────
+// Safe expression evaluator: only numbers, +, -, *, /, (, ), spaces, dots
+function evalIncome(raw){
+  if(!raw||!raw.toString().trim()) return null;
+  const s=raw.toString().replace(/,/g,'.').trim();
+  // If plain number
+  if(/^\d+(\.\d+)?$/.test(s)){const v=parseFloat(s);return isNaN(v)?null:v;}
+  // If expression with allowed chars only
+  if(!/^[\d\s+\-*/(). ]+$/.test(s)) return null;
+  try{
+    // eslint-disable-next-line no-new-func
+    const v=Function('"use strict";return('+s+')')();
+    return typeof v==='number'&&isFinite(v)?Math.round(v*100)/100:null;
+  }catch(e){return null;}
+}
+
+function onIncomeInput(){
+  const raw=document.getElementById('fi').value;
+  const prev=document.getElementById('fi-preview');
+  if(!raw.trim()){prev.textContent='';prev.className='fi-preview';return;}
+  // Check if it's an expression (has operators)
+  if(/[+\-*/]/.test(raw)){
+    const v=evalIncome(raw);
+    if(v!==null){
+      prev.textContent='= $'+v.toLocaleString('ru-RU');
+      prev.className='fi-preview ok';
+    }else{
+      prev.textContent='Некорректное выражение';
+      prev.className='fi-preview err';
+    }
+  }else{
+    const v=parseFloat(raw.replace(',','.'));
+    if(!isNaN(v)){
+      prev.textContent='$'+v.toLocaleString('ru-RU');
+      prev.className='fi-preview plain';
+    }else{
+      prev.textContent='Некорректное значение';
+      prev.className='fi-preview err';
+    }
+  }
+}
+
+function onIncomeBlur(){
+  // Don't collapse expression — keep as-is so user can edit
+}
+
+// ── Mini popup calculator ──
+function toggleCalcPopup(e){
+  e.stopPropagation();
+  const popup=document.getElementById('calc-popup');
+  const isOpen=popup.classList.contains('open');
+  if(isOpen){popup.classList.remove('open');return;}
+  // Init with current fi value as first line
+  const cur=document.getElementById('fi').value;
+  const curVal=evalIncome(cur);
+  document.getElementById('calc-lines').innerHTML='';
+  calcLineCount=0;
+  addCalcLine(curVal!==null&&curVal>0?curVal:'');
+  addCalcLine('');
+  updateCalcTotal();
+  popup.classList.add('open');
+  // Close on outside click
+  setTimeout(()=>document.addEventListener('click',closeCalcOutside,{once:true}),10);
+}
+
+function closeCalcOutside(e){
+  const popup=document.getElementById('calc-popup');
+  if(!popup.contains(e.target)&&popup.classList.contains('open')){
+    popup.classList.remove('open');
+  }
+}
+
+let calcLineCount=0;
+function addCalcLine(val=''){
+  const id='cl'+calcLineCount++;
+  const div=document.createElement('div');
+  div.className='calc-line';
+  div.id='cld'+id;
+  div.innerHTML=`<input type="text" id="${id}" placeholder="сумма" value="${val}" oninput="updateCalcTotal()">
+    <button class="rm" type="button" onclick="removeCalcLine('cld${id}')">✕</button>`;
+  document.getElementById('calc-lines').appendChild(div);
+  setTimeout(()=>{const el=document.getElementById(id);if(el)el.focus();},50);
+  updateCalcTotal();
+}
+
+function removeCalcLine(lineId){
+  const el=document.getElementById(lineId);
+  if(el){el.remove();updateCalcTotal();}
+}
+
+function updateCalcTotal(){
+  const inputs=document.querySelectorAll('#calc-lines input');
+  let total=0;
+  inputs.forEach(inp=>{
+    const v=evalIncome(inp.value);
+    if(v!==null) total+=v;
+  });
+  document.getElementById('calc-total-val').textContent='$'+Math.round(total).toLocaleString('ru-RU');
+}
+
+function applyCalc(){
+  const inputs=document.querySelectorAll('#calc-lines input');
+  const parts=[];
+  let total=0;
+  inputs.forEach(inp=>{
+    const raw=inp.value.trim();
+    if(!raw) return;
+    const v=evalIncome(raw);
+    if(v!==null){parts.push(raw);total+=v;}
+  });
+  const fi=document.getElementById('fi');
+  if(parts.length===1){
+    fi.value=evalIncome(parts[0]);
+  }else if(parts.length>1){
+    fi.value=parts.join('+');
+  }
+  document.getElementById('calc-popup').classList.remove('open');
+  onIncomeInput();
+}
 
 showLoading(true);
 initFirestore();
