@@ -7,6 +7,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <style>
 :root{
   --grad:linear-gradient(168deg,#1ECFC7 0%,#2E86C1 100%);
@@ -247,6 +248,28 @@ select.fi{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.o
 .cbox p{font-size:13px;color:var(--text2);margin-bottom:24px;line-height:1.65;font-weight:600}
 .cbtns{display:flex;gap:10px;justify-content:center}
 
+/* ─── TABS ─── */
+.view-tabs{display:flex;gap:4px;background:var(--white);border:1.5px solid var(--border2);border-radius:var(--r);padding:3px;width:fit-content;margin-bottom:16px}
+.vtab{padding:7px 18px;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer;transition:all .17s;color:var(--text2);border:none;background:transparent;font-family:'Nunito',sans-serif}
+.vtab:hover{color:var(--text)}
+.vtab.on{background:var(--teal);color:#fff;box-shadow:0 2px 8px rgba(15,198,190,.3)}
+
+/* ─── MONTHLY VIEW ─── */
+.monthly-view{display:none}
+.monthly-view.active{display:block}
+.projects-view{display:block}
+.projects-view.hidden{display:none}
+
+.chart-panel{background:var(--white);border-radius:var(--rl);border:1.5px solid var(--border);box-shadow:var(--shadow);padding:20px 24px;margin-bottom:16px}
+.chart-title{font-size:14px;font-weight:800;color:var(--text);margin-bottom:4px}
+.chart-sub{font-size:12px;color:var(--text2);margin-bottom:20px;font-weight:600}
+.chart-wrap{position:relative;height:280px}
+
+.month-stats-table{background:var(--white);border-radius:var(--rl);border:1.5px solid var(--border);box-shadow:var(--shadow);overflow:hidden}
+.month-stats-table table{min-width:500px}
+.total-row td{font-weight:800;background:var(--bg2);border-top:2px solid var(--border2)!important}
+.no-deliv-note{font-size:12px;color:var(--text3);padding:10px 20px;font-weight:600;border-top:1px solid var(--border)}
+
 /* ─── LOADING ─── */
 .loading{position:fixed;inset:0;background:rgba(238,249,249,.92);backdrop-filter:blur(4px);z-index:999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px}
 .loading-spinner{width:40px;height:40px;border:3px solid var(--border2);border-top-color:var(--teal);border-radius:50%;animation:spin .8s linear infinite}
@@ -346,6 +369,14 @@ select.fi{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.o
 </nav>
 
 <div class="main">
+  <!-- View tabs -->
+  <div class="view-tabs">
+    <button class="vtab on" id="tab-projects" onclick="switchTab('projects')">📋 Проекты</button>
+    <button class="vtab" id="tab-monthly" onclick="switchTab('monthly')">📅 По месяцам</button>
+  </div>
+
+  <!-- ═══ PROJECTS VIEW ═══ -->
+  <div class="projects-view" id="view-projects">
   <div class="topbar">
     <div class="srch">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
@@ -422,7 +453,38 @@ select.fi{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.o
       </table>
     </div>
   </div>
-</div>
+
+</div><!-- /view-projects -->
+
+<!-- ═══ MONTHLY VIEW ═══ -->
+<div class="monthly-view" id="view-monthly">
+
+  <div class="chart-panel">
+    <div class="chart-title">Доходы и расходы по месяцам</div>
+    <div class="chart-sub" id="chart-sub">Доход — по месяцу получения оплаты · Расход — часы Hexabyte × ставка</div>
+    <div class="chart-wrap"><canvas id="monthly-chart"></canvas></div>
+  </div>
+
+  <div class="month-stats-table panel">
+    <div class="ph"><span class="ph-title">Детализация по месяцам</span></div>
+    <div class="tw">
+      <table>
+        <thead><tr>
+          <th style="min-width:80px">Месяц</th>
+          <th class="r">Доход</th>
+          <th class="r">Расход</th>
+          <th class="r">Профит</th>
+          <th class="r">Маржа</th>
+          <th style="min-width:160px">Сданные проекты</th>
+        </tr></thead>
+        <tbody id="monthly-tbody"></tbody>
+      </table>
+    </div>
+    <div class="no-deliv-note" id="no-deliv-note" style="display:none"></div>
+  </div>
+
+</div><!-- /view-monthly -->
+</div><!-- /main -->
 
 <!-- Modal -->
 <div class="ov" id="ov" onclick="ovc(event)">
@@ -458,13 +520,19 @@ select.fi{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.o
           </select>
         </div>
         <div class="fg">
-          <label>Месяц сдачи проекта</label>
+          <label>Месяц сдачи (для гарантии)</label>
           <select class="fi" id="fdelivery">
             <option value="">— не указан —</option>
           </select>
         </div>
       </div>
       <div class="fr">
+        <div class="fg">
+          <label>📅 Месяц получения оплаты</label>
+          <select class="fi" id="fpaymonth">
+            <option value="">— не указан —</option>
+          </select>
+        </div>
         <div class="fg">
           <label>Статус оплаты</label>
           <select class="fi" id="fpayment">
@@ -681,9 +749,13 @@ function buildM(p){
 }
 
 function fillDeliverySelect(currentVal){
+  const opts='<option value="">— не указан —</option>'+
+    MONTHS.map(m=>`<option value="${m}">${m}</option>`).join('');
   const sel=document.getElementById('fdelivery');
-  sel.innerHTML='<option value="">— не указан —</option>'+
-    MONTHS.map(m=>`<option value="${m}"${m===currentVal?' selected':''}>${m}</option>`).join('');
+  sel.innerHTML=opts;
+  sel.value=currentVal||'';
+  const selP=document.getElementById('fpaymonth');
+  selP.innerHTML=opts;
 }
 
 function gr(){return parseFloat(document.getElementById('rate').value)||20}
@@ -886,6 +958,7 @@ function openAdd(){
   document.getElementById('fprofitshared').value='';
   document.getElementById('ferr').textContent='';
   fillDeliverySelect('');
+  document.getElementById('fpaymonth').value='';
   buildM(null);
   document.getElementById('ov').classList.add('open');
   setTimeout(()=>document.getElementById('fs').focus(),150);
@@ -906,6 +979,7 @@ function openEdit(){
   document.getElementById('fprofitshared').value=p.profitShared||'';
   document.getElementById('ferr').textContent='';
   fillDeliverySelect(p.deliveryMonth||'');
+  document.getElementById('fpaymonth').value=p.paymentMonth||'';
   buildM(p);
   document.getElementById('ov').classList.add('open');
 }
@@ -929,6 +1003,7 @@ function save(){
     warn:document.getElementById('fw').checked,
     status:document.getElementById('fstatus').value,
     deliveryMonth:document.getElementById('fdelivery').value,
+    paymentMonth:document.getElementById('fpaymonth').value,
     paymentStatus:document.getElementById('fpayment').value,
     profitShared:document.getElementById('fprofitshared').value,
     months
@@ -976,6 +1051,186 @@ function importData(e){
   };
   reader.readAsText(file);
   e.target.value='';
+}
+
+// ─── QUICK EDIT PAYMENT MONTH ────────────────────────────────
+function quickEditPayment(id){
+  aid = id;
+  openEdit();
+  // After modal opens, scroll to and highlight the payment month field
+  setTimeout(()=>{
+    const el = document.getElementById('fpaymonth');
+    if(el){
+      el.style.borderColor = 'var(--teal)';
+      el.style.background = '#E0FAF9';
+      el.scrollIntoView({behavior:'smooth', block:'center'});
+      el.focus();
+    }
+  }, 200);
+}
+
+// ─── TABS ────────────────────────────────────────────────────
+let currentTab = 'projects';
+let monthlyChart = null;
+
+function switchTab(tab) {
+  currentTab = tab;
+  document.getElementById('view-projects').classList.toggle('hidden', tab !== 'projects');
+  document.getElementById('view-monthly').classList.toggle('active', tab === 'monthly');
+  document.getElementById('tab-projects').classList.toggle('on', tab === 'projects');
+  document.getElementById('tab-monthly').classList.toggle('on', tab === 'monthly');
+  if (tab === 'monthly') renderMonthly();
+}
+
+// ─── MONTHLY ANALYTICS ───────────────────────────────────────
+function computeMonthly() {
+  const rate = gr();
+  const stats = {};
+  MONTHS.forEach(m => { stats[m] = {income:0, expense:0, projects:[]}; });
+
+  P.forEach(p => {
+    // Расход: часы × ставка по каждому месяцу
+    (p.months || []).forEach(m => {
+      if (stats[m.month]) stats[m.month].expense += n(m.hours) * rate;
+    });
+    // Доход: привязываем к месяцу получения оплаты (не к сдаче)
+    const incomeMonth = p.paymentMonth || p.deliveryMonth; // fallback на сдачу если не указан
+    if (incomeMonth && stats[incomeMonth]) {
+      stats[incomeMonth].income += p.income;
+      stats[incomeMonth].projects.push(p.site);
+    }
+  });
+  return stats;
+}
+
+function renderMonthly() {
+  const stats = computeMonthly();
+  const rate = gr();
+
+  const labels = MONTHS;
+  const incomeData = MONTHS.map(m => Math.round(stats[m].income));
+  const expenseData = MONTHS.map(m => Math.round(stats[m].expense));
+  const profitData = MONTHS.map((m,i) => incomeData[i] - expenseData[i]);
+
+  // Count projects without paymentMonth (not tracked in chart)
+  const noDeliv = P.filter(p => !p.paymentMonth && !p.deliveryMonth);
+
+  // Update chart
+  const ctx = document.getElementById('monthly-chart').getContext('2d');
+  if (monthlyChart) monthlyChart.destroy();
+  monthlyChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'Доход',
+          data: incomeData,
+          backgroundColor: 'rgba(15,196,122,.75)',
+          borderColor: '#0FC47A',
+          borderWidth: 1.5,
+          borderRadius: 6,
+          borderSkipped: false,
+        },
+        {
+          label: 'Расход',
+          data: expenseData,
+          backgroundColor: 'rgba(240,82,82,.65)',
+          borderColor: '#F05252',
+          borderWidth: 1.5,
+          borderRadius: 6,
+          borderSkipped: false,
+        },
+        {
+          label: 'Профит',
+          data: profitData,
+          type: 'line',
+          borderColor: '#2E86C1',
+          backgroundColor: 'rgba(46,134,193,.1)',
+          borderWidth: 2.5,
+          pointBackgroundColor: '#2E86C1',
+          pointRadius: 4,
+          tension: 0.35,
+          fill: false,
+          yAxisID: 'y',
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: {mode: 'index', intersect: false},
+      plugins: {
+        legend: {
+          position: 'top',
+          labels: {
+            font: {family:'Nunito', weight:'700', size:12},
+            usePointStyle: true,
+            padding: 16,
+          }
+        },
+        tooltip: {
+          backgroundColor: '#1A2B3C',
+          titleFont: {family:'Nunito', weight:'700'},
+          bodyFont: {family:'Nunito'},
+          padding: 12,
+          callbacks: {
+            label: ctx => ` ${ctx.dataset.label}: $${ctx.parsed.y.toLocaleString('ru-RU')}`
+          }
+        }
+      },
+      scales: {
+        x: {
+          grid: {color: '#DFF0EF'},
+          ticks: {font: {family:'Nunito', weight:'700', size:11}}
+        },
+        y: {
+          grid: {color: '#DFF0EF'},
+          ticks: {
+            font: {family:'Nunito', size:11},
+            callback: v => '$' + v.toLocaleString('ru-RU')
+          }
+        }
+      }
+    }
+  });
+
+  // Render table
+  let totIncome=0, totExpense=0;
+  document.getElementById('monthly-tbody').innerHTML = MONTHS.map(m => {
+    const {income, expense, projects} = stats[m];
+    const profit = income - expense;
+    const margin = income > 0 ? Math.round(profit/income*1000)/10 : null;
+    const pc = profit >= 0 ? 'pos' : 'neg';
+    totIncome += income; totExpense += expense;
+    return `<tr>
+      <td style="font-weight:800">${m}</td>
+      <td class="r">${income > 0 ? '$'+fmt(income) : '<span style="color:var(--text3)">—</span>'}</td>
+      <td class="r">${expense > 0 ? '$'+fmt(expense) : '<span style="color:var(--text3)">—</span>'}</td>
+      <td class="r ${income>0||expense>0?pc:''}">${income>0||expense>0 ? '$'+fmt(profit) : '<span style="color:var(--text3)">—</span>'}</td>
+      <td class="r">${margin !== null ? margin+'%' : '<span style="color:var(--text3)">—</span>'}</td>
+      <td style="font-size:12px;color:var(--text2)">${projects.length ? projects.join(', ') : ''}</td>
+    </tr>`;
+  }).join('') + `<tr class="total-row">
+    <td>ИТОГО</td>
+    <td class="r">$${fmt(totIncome)}</td>
+    <td class="r">$${fmt(totExpense)}</td>
+    <td class="r ${totIncome-totExpense>=0?'pos':'neg'}">$${fmt(totIncome-totExpense)}</td>
+    <td class="r">${totIncome>0?Math.round((totIncome-totExpense)/totIncome*1000)/10+'%':''}</td>
+    <td></td>
+  </tr>`;
+
+  // Note about projects without payment month
+  const noteEl = document.getElementById('no-deliv-note');
+  if (noDeliv.length > 0) {
+    noteEl.style.display = 'block';
+    const links = noDeliv.map(p =>
+      `<button onclick="quickEditPayment('${p.id}')" style="background:var(--white);border:1.5px solid var(--border2);border-radius:8px;padding:3px 10px;font-size:11px;font-weight:700;color:var(--teal2);cursor:pointer;font-family:Nunito,sans-serif;transition:all .15s" onmouseover="this.style.background='var(--green-bg)'" onmouseout="this.style.background='var(--white)'">${p.site} ✏️</button>`
+    ).join(' ');
+    noteEl.innerHTML = `⚠ Не указан месяц оплаты — доход не учтён в графике:<br><div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">${links}</div>`;
+  } else {
+    noteEl.style.display = 'none';
+  }
 }
 
 // ─── DRAWER ──────────────────────────────────────────────────
