@@ -555,7 +555,10 @@ select.fi{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.o
       <!-- Months -->
       <div class="section-divider">
         <span>Часы Hexabyte по месяцам</span>
-        <button class="add-month-btn" onclick="addMonth()" type="button">+ Добавить месяц</button>
+        <div style="display:flex;gap:6px">
+          <button class="add-month-btn" style="background:var(--text2)" onclick="addPrevMonth()" type="button">← Добавить прошлый</button>
+          <button class="add-month-btn" onclick="addMonth()" type="button">+ Следующий →</button>
+        </div>
       </div>
       <div class="mg" id="mins"></div>
     </div>
@@ -641,6 +644,14 @@ function nextMonthStr(last){
   return mi===11?`Янв ${year+1}`:`${RU_M[mi+1]} ${year}`;
 }
 
+function prevMonthStr(first){
+  const[mon,yr]=first.split(' ');
+  const mi=RU_M.indexOf(mon);
+  const year=parseInt(yr);
+  if(mi<0) return null;
+  return mi===0?`Дек ${year-1}`:`${RU_M[mi-1]} ${year}`;
+}
+
 // Warranty: next 2 months after delivery
 function warrantyEnd(delivMonth){
   if(!delivMonth) return null;
@@ -717,11 +728,30 @@ function addMonth(){
   MONTHS.push(next);
   P.forEach(p=>{if(!p.months.find(m=>m.month===next))p.months.push({month:next,hours:0});});
   persist();
-  // rebuild delivery selects
+  const curVals=getCurrentModalHoursByName();
   fillDeliverySelect(document.getElementById('fdelivery').value);
-  const vals=getCurrentModalHours();
-  buildModalMonths(vals,true);
+  buildModalMonths(null,true,curVals);
   toast(`Добавлен: ${next}`);
+}
+
+function addPrevMonth(){
+  const first=MONTHS[0];
+  const prev=prevMonthStr(first);
+  if(!prev||MONTHS.includes(prev)){toast('Месяц уже добавлен');return;}
+  MONTHS.unshift(prev);
+  P.forEach(p=>{if(!p.months.find(m=>m.month===prev))p.months.unshift({month:prev,hours:0});});
+  persist();
+  const curVals=getCurrentModalHoursByName();
+  fillDeliverySelect(document.getElementById('fdelivery').value);
+  buildModalMonths(null,false,curVals);
+  toast(`Добавлен: ${prev}`);
+}
+
+// Сохраняем значения по названию месяца (не по индексу) — индексы меняются при добавлении в начало
+function getCurrentModalHoursByName(){
+  const v={};
+  MONTHS.forEach((m,i)=>{const el=document.getElementById('mh'+i);if(el)v[m]=el.value;});
+  return v;
 }
 
 function getCurrentModalHours(){
@@ -730,10 +760,14 @@ function getCurrentModalHours(){
   return v;
 }
 
-function buildModalMonths(existingVals,highlightLast){
+function buildModalMonths(existingVals, highlightLast, byName){
   document.getElementById('mins').innerHTML=MONTHS.map((m,i)=>{
     const isNew=highlightLast&&i===MONTHS.length-1;
-    const v=existingVals&&existingVals[i]!==undefined?existingVals[i]:'';
+    // byName = values keyed by month name (used after add/remove)
+    // existingVals = values keyed by index (legacy)
+    let v='';
+    if(byName&&byName[m]!==undefined) v=byName[m];
+    else if(existingVals&&existingVals[i]!==undefined) v=existingVals[i];
     return`<div class="mc${isNew?' new-month':''}">
       <label>${m}</label>
       <input type="number" min="0" step="0.25" id="mh${i}" value="${v}" placeholder="0">
@@ -743,9 +777,9 @@ function buildModalMonths(existingVals,highlightLast){
 
 function buildM(p){
   const map=new Map((p?.months||[]).map(m=>[m.month,m.hours]));
-  const vals={};
-  MONTHS.forEach((m,i)=>{const h=n(map.get(m)||0);vals[i]=h||'';});
-  buildModalMonths(vals,false);
+  const byName={};
+  MONTHS.forEach(m=>{const h=n(map.get(m)||0);byName[m]=h||'';});
+  buildModalMonths(null,false,byName);
 }
 
 function fillDeliverySelect(currentVal){
