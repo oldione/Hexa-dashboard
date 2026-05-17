@@ -382,6 +382,14 @@ select.fi{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.o
     <div class="rate-w">
       <span class="wlbl">Ставка Hexabyte</span>
       <div class="rate-row"><input type="number" id="rate" min="1" max="999" value="20"><span>€/ч</span></div>
+      <div style="height:8px"></div>
+      <span class="wlbl">Курс евро</span>
+      <div class="rate-row">
+        <span style="color:rgba(255,255,255,.65);font-size:13px;font-weight:700">1€ =</span>
+        <input type="number" id="eurrate" min="0.5" max="3" step="0.01" value="1.08" style="font-size:16px">
+        <span>$</span>
+      </div>
+      <div style="font-size:10px;color:rgba(255,255,255,.38);margin-top:6px;font-weight:700;text-align:center">расход: часы × ставка × курс</div>
     </div>
     <button class="add-btn" onclick="openAdd()">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
@@ -474,7 +482,7 @@ select.fi{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.o
         <thead><tr>
           <th style="padding-left:20px;min-width:70px">Месяц</th>
           <th class="r" style="min-width:70px">Часов</th>
-          <th class="r" style="min-width:80px">Расход €</th>
+          <th class="r" style="min-width:80px">Расход $</th>
           <th class="mob-hide" style="min-width:120px">Активность</th>
         </tr></thead>
         <tbody id="dmon"></tbody>
@@ -489,7 +497,7 @@ select.fi{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.o
 
   <div class="chart-panel">
     <div class="chart-title">Доходы и расходы по месяцам</div>
-    <div class="chart-sub" id="chart-sub">Доход — по месяцу получения оплаты · Расход — часы Hexabyte × ставка</div>
+    <div class="chart-sub" id="chart-sub">Доход — по месяцу получения оплаты · Расход — часы × ставка€ × курс$/€</div>
     <div class="chart-wrap"><canvas id="monthly-chart"></canvas></div>
   </div>
 
@@ -726,6 +734,7 @@ async function persist(){
       projects:P,
       months:MONTHS,
       rate:gr(),
+      eurRate:gx(),
       updatedAt:new Date().toISOString()
     });
     showSync(false);
@@ -753,6 +762,7 @@ function initFirestore(){
     MONTHS=data.months||[...DEFAULT_MONTHS];
     P=(data.projects||[]).map(p=>({...p,months:normMonths(p.months)}));
     if(data.rate) document.getElementById('rate').value=data.rate;
+    if(data.eurRate) document.getElementById('eurrate').value=data.eurRate;
     render();
     if(aid&&P.find(p=>p.id===aid)) renderDet();
   }, err=>{
@@ -840,6 +850,7 @@ function fillDeliverySelect(currentVal){
 }
 
 function gr(){return parseFloat(document.getElementById('rate').value)||20}
+function gx(){return parseFloat(document.getElementById('eurrate').value)||1.08}
 function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2)}
 function n(v){return isNaN(+v)?0:+v}
 function fmt(v){return Math.round(v).toLocaleString('ru-RU')}
@@ -847,9 +858,9 @@ function fh(v){return v%1===0?v:parseFloat((+v).toFixed(2))}
 function esc(s){return(s||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'")}
 
 function calc(p){
-  const r=gr();
+  const r=gr(), x=gx();
   const h=p.months.reduce((s,m)=>s+n(m.hours),0);
-  const c=h*r;
+  const c=h*r*x;
   const pr=p.income-c-n(p.dop);
   const m=p.income>0?pr/p.income*100:0;
   return{h,c,pr,m};
@@ -916,7 +927,7 @@ function renderCards(){
   const am=ti>0?Math.round(tp/ti*1000)/10:0;
   document.getElementById('cards').innerHTML=`
     <div class="sc c1"><div class="sc-ico">💰</div><div class="sc-lbl">Выручка</div><div class="sc-val v-teal">$${fmt(ti)}</div><div class="sc-sub">${list.length} проектов · avg $${fmt(list.length?ti/list.length:0)}</div></div>
-    <div class="sc c2"><div class="sc-ico">⏱</div><div class="sc-lbl">Расход</div><div class="sc-val">$${fmt(tc)}</div><div class="sc-sub">${fh(th)} ч × ${r} €/ч</div></div>
+    <div class="sc c2"><div class="sc-ico">⏱</div><div class="sc-lbl">Расход</div><div class="sc-val">$${fmt(tc)}</div><div class="sc-sub">${fh(th)} ч × ${r}€ × ${gx()}$/€</div></div>
     <div class="sc c3"><div class="sc-ico">📈</div><div class="sc-lbl">Профит</div><div class="sc-val v-green">$${fmt(tp)}</div><div class="sc-sub">avg $${fmt(list.length?tp/list.length:0)}</div></div>
     <div class="sc c4"><div class="sc-ico">🎯</div><div class="sc-lbl">Маржа</div><div class="sc-val v-yel">${am}%</div><div class="sc-sub">по выборке</div></div>`;
 }
@@ -985,7 +996,7 @@ function renderDet(){
   const mc2=m>=75?'var(--green)':m>=55?'var(--amber)':'var(--red)';
   document.getElementById('dkpi').innerHTML=`
     <div class="kpi"><div class="kpi-l">Выручка</div><div class="kpi-v kv-blue">$${fmt(p.income)}</div>${p.dop>0?`<div class="kpi-s">+ $${fmt(p.dop)} правки</div>`:''}</div>
-    <div class="kpi"><div class="kpi-l">Часов всего</div><div class="kpi-v">${fh(h)} ч</div><div class="kpi-s">× ${r} €/ч</div></div>
+    <div class="kpi"><div class="kpi-l">Часов всего</div><div class="kpi-v">${fh(h)} ч</div><div class="kpi-s">${r}€/ч × ${gx()}$/€</div></div>
     <div class="kpi"><div class="kpi-l">Расход</div><div class="kpi-v">$${fmt(c)}</div></div>
     <div class="kpi"><div class="kpi-l">Профит · маржа</div><div class="kpi-v kv-green">$${fmt(pr)}</div><div class="kpi-s" style="color:${mc2};font-weight:800">${Math.round(m*10)/10}%</div></div>`;
 
@@ -1109,7 +1120,7 @@ function doDel(){P=P.filter(p=>p.id!==did);persist();closeC();closeD();render();
 
 // ─── EXPORT / IMPORT ─────────────────────────────────────────
 function exportData(){
-  const data={projects:P,months:MONTHS,rate:gr(),exportedAt:new Date().toISOString()};
+  const data={projects:P,months:MONTHS,rate:gr(),eurRate:gx(),exportedAt:new Date().toISOString()};
   const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
   const a=document.createElement('a');
   a.href=URL.createObjectURL(blob);
@@ -1128,6 +1139,7 @@ function importData(e){
         P=data.projects;
         if(data.months) MONTHS=data.months;
         if(data.rate) document.getElementById('rate').value=data.rate;
+        if(data.eurRate) document.getElementById('eurrate').value=data.eurRate;
         P.forEach(p=>{p.months=normMonths(p.months);});
         await persist();closeD();render();
         toast(`Импортировано ${P.length} проектов`);
@@ -1169,14 +1181,14 @@ function switchTab(tab) {
 
 // ─── MONTHLY ANALYTICS ───────────────────────────────────────
 function computeMonthly() {
-  const rate = gr();
+  const rate = gr(), x = gx();
   const stats = {};
   MONTHS.forEach(m => { stats[m] = {income:0, expense:0, projects:[]}; });
 
   P.forEach(p => {
-    // Расход: часы × ставка по каждому месяцу
+    // Расход: часы × ставка€ × курс → $
     (p.months || []).forEach(m => {
-      if (stats[m.month]) stats[m.month].expense += n(m.hours) * rate;
+      if (stats[m.month]) stats[m.month].expense += n(m.hours) * rate * x;
     });
     // Доход: привязываем к месяцу получения оплаты (не к сдаче)
     const incomeMonth = p.paymentMonth || p.deliveryMonth; // fallback на сдачу если не указан
@@ -1339,6 +1351,7 @@ function toast(msg){
 
 // ─── EVENTS ──────────────────────────────────────────────────
 document.getElementById('rate').addEventListener('input',()=>{persist();render();if(aid)renderDet();});
+document.getElementById('eurrate').addEventListener('input',()=>{persist();render();if(aid)renderDet();});
 document.addEventListener('keydown',e=>{
   if(e.key==='Escape'){
     if(document.getElementById('cov').classList.contains('open')) closeC();
