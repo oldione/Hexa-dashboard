@@ -310,6 +310,13 @@ select.fi{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.o
 .calc-add-line:hover{border-color:var(--teal);color:var(--teal2);background:var(--white)}
 .calc-apply{padding:7px 16px;background:var(--teal);border:none;border-radius:8px;font-size:12px;font-weight:800;color:#fff;cursor:pointer;font-family:'Nunito',sans-serif;transition:background .15s}
 .calc-apply:hover{background:var(--teal2)}
+/* ─── REFERRAL & DURATION ─── */
+.ref-badge{display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:800;padding:2px 8px;border-radius:20px;background:#F3E8FF;color:#6B21A8;white-space:nowrap}
+.dur-badge{display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:800;padding:2px 8px;border-radius:20px;background:#E0F2FE;color:#0369A1;white-space:nowrap}
+.kpi-ref{color:#6B21A8}
+.pct-wrap{display:flex;align-items:center;gap:0}
+.pct-wrap .fi{border-radius:var(--r) 0 0 var(--r)!important;text-align:center}
+.pct-wrap .pct-sfx{height:44px;padding:0 10px;background:var(--bg2);border:1.5px solid var(--border2);border-left:none;border-radius:0 var(--r) var(--r) 0;font-size:13px;font-weight:800;color:var(--text3);display:flex;align-items:center}
 ::-webkit-scrollbar{width:5px;height:5px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:var(--border2);border-radius:10px}::-webkit-scrollbar-thumb:hover{background:var(--teal)}
 
 /* ─── RESPONSIVE ─── */
@@ -557,6 +564,16 @@ select.fi{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.o
       </div>
       <div class="fr">
         <div class="fg"><label>Доп. расход / правки ($)</label><input class="fi" id="fd" type="number" min="0" placeholder="0"></div>
+        <div class="fg">
+          <label>Реферальный % партнёру</label>
+          <div class="pct-wrap">
+            <input class="fi" id="frefpct" type="number" min="0" max="100" step="0.5" placeholder="0">
+            <span class="pct-sfx">%</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="fr">
         <div class="fg" style="justify-content:flex-end"><div class="wr"><input type="checkbox" id="fw"><label for="fw">⚠ Пометить как неполные данные</label></div></div>
       </div>
 
@@ -583,11 +600,19 @@ select.fi{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.o
       </div>
       <div class="fr">
         <div class="fg">
+          <label>💰 Месяц предоплаты</label>
+          <select class="fi" id="fprepaymonth">
+            <option value="">— не указан —</option>
+          </select>
+        </div>
+        <div class="fg">
           <label>📅 Месяц получения оплаты</label>
           <select class="fi" id="fpaymonth">
             <option value="">— не указан —</option>
           </select>
         </div>
+      </div>
+      <div class="fr">
         <div class="fg">
           <label>Статус оплаты</label>
           <select class="fi" id="fpayment">
@@ -845,8 +870,8 @@ function fillDeliverySelect(currentVal){
   const sel=document.getElementById('fdelivery');
   sel.innerHTML=opts;
   sel.value=currentVal||'';
-  const selP=document.getElementById('fpaymonth');
-  selP.innerHTML=opts;
+  document.getElementById('fpaymonth').innerHTML=opts;
+  document.getElementById('fprepaymonth').innerHTML=opts;
 }
 
 function gr(){return parseFloat(document.getElementById('rate').value)||20}
@@ -857,13 +882,23 @@ function fmt(v){return Math.round(v).toLocaleString('ru-RU')}
 function fh(v){return v%1===0?v:parseFloat((+v).toFixed(2))}
 function esc(s){return(s||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'")}
 
+// Кол-во месяцев между двумя строками вида "Авг 25"
+function monthDiff(from, to){
+  if(!from||!to) return null;
+  const parse=s=>{const[mon,yr]=s.split(' ');return{mi:RU_M.indexOf(mon),yr:parseInt(yr)};};
+  const a=parse(from), b=parse(to);
+  if(a.mi<0||b.mi<0) return null;
+  return (b.yr-a.yr)*12+(b.mi-a.mi);
+}
+
 function calc(p){
   const r=gr(), x=gx();
   const h=p.months.reduce((s,m)=>s+n(m.hours),0);
   const c=h*r*x;
-  const pr=p.income-c-n(p.dop);
+  const ref=n(p.refPct)>0 ? p.income*n(p.refPct)/100 : 0;
+  const pr=p.income-c-n(p.dop)-ref;
   const m=p.income>0?pr/p.income*100:0;
-  return{h,c,pr,m};
+  return{h,c,ref,pr,m};
 }
 
 function clients(){return['Все',...[...new Set(P.map(p=>p.client))].sort()]}
@@ -945,11 +980,12 @@ function renderTable(){
     const pb=payBadge(p.paymentStatus);
     const pfb=profitBadge(p.profitShared);
     const deliv=p.deliveryMonth?`<span class="deliv-tag">📅 ${p.deliveryMonth}</span>`:'';
+    const refb=n(p.refPct)>0?`<span class="ref-badge">🤝 ${n(p.refPct)}%</span>`:'';
     return`<tr onclick="tog('${p.id}')" class="${aid===p.id?'sel':''}">
       <td>
         <div class="pn">${p.site}${wb}</div>
         <div class="pm">${p.client}${p.type?' · '+p.type:''}</div>
-        <div class="p-badges">${sb}${pb}${pfb}${deliv}</div>
+        <div class="p-badges">${sb}${pb}${pfb}${deliv}${refb}</div>
       </td>
       <td class="r">$${fmt(p.income)}</td>
       <td class="r">${fh(h)}</td>
@@ -979,8 +1015,11 @@ function renderDet(){
   let badges='';
   if(p.status) badges+=`<span class="dh-sbadge">${p.status}</span>`;
   if(p.deliveryMonth) badges+=`<span class="dh-deliv">📅 Сдан: ${p.deliveryMonth}</span>`;
+  if(p.prepaymentMonth) badges+=`<span class="dh-deliv">💰 Предоплата: ${p.prepaymentMonth}</span>`;
+  if(durLabel) badges+=`<span class="dh-deliv">⏱ Разработка: ${durLabel}</span>`;
   if(p.paymentStatus) badges+=`<span class="dh-pbadge">${p.paymentStatus==='Yes'?'✅':p.paymentStatus==='No'?'❌':'🟡'} ${p.paymentStatus}</span>`;
   if(p.profitShared) badges+=`<span class="dh-pbadge">${p.profitShared==='Да'?'✅':'⏳'} Профит: ${p.profitShared}</span>`;
+  if(refAmt>0) badges+=`<span class="dh-deliv" style="background:rgba(167,139,250,.25)">🤝 Реферал: ${n(p.refPct)}% = $${fmt(refAmt)}</span>`;
   document.getElementById('dh-badges').innerHTML=badges;
 
   // Warranty row
@@ -994,17 +1033,31 @@ function renderDet(){
   document.getElementById('warranty-row').innerHTML=warr;
 
   const mc2=m>=75?'var(--green)':m>=55?'var(--amber)':'var(--red)';
+
+  // Длительность разработки между предоплатой и финальной оплатой
+  const durMonths = monthDiff(p.prepaymentMonth, p.paymentMonth);
+  const durLabel = durMonths !== null
+    ? (durMonths === 0 ? 'в том же месяце' : `${durMonths} мес.`)
+    : null;
+
+  // Реферал
+  const refAmt = n(p.refPct) > 0 ? p.income * n(p.refPct) / 100 : 0;
+  const refKpi = refAmt > 0
+    ? `<div class="kpi"><div class="kpi-l">Реферал партнёру</div><div class="kpi-v kpi-ref">$${fmt(refAmt)}</div><div class="kpi-s" style="color:#6B21A8">${n(p.refPct)}% от выручки</div></div>`
+    : '';
+
   document.getElementById('dkpi').innerHTML=`
     <div class="kpi"><div class="kpi-l">Выручка</div><div class="kpi-v kv-blue">$${fmt(p.income)}</div>${p.dop>0?`<div class="kpi-s">+ $${fmt(p.dop)} правки</div>`:''}</div>
     <div class="kpi"><div class="kpi-l">Часов всего</div><div class="kpi-v">${fh(h)} ч</div><div class="kpi-s">${r}€/ч × ${gx()}$/€</div></div>
     <div class="kpi"><div class="kpi-l">Расход</div><div class="kpi-v">$${fmt(c)}</div></div>
+    ${refKpi}
     <div class="kpi"><div class="kpi-l">Профит · маржа</div><div class="kpi-v kv-green">$${fmt(pr)}</div><div class="kpi-s" style="color:${mc2};font-weight:800">${Math.round(m*10)/10}%</div></div>`;
 
   const mxH=Math.max(...p.months.map(mo=>n(mo.hours)),1);
   document.getElementById('dmon').innerHTML=MONTHS.map(mName=>{
     const entry=p.months.find(x=>x.month===mName);
     const mh=entry?n(entry.hours):0;
-    const mc3=mh*r;
+    const mc3=mh*r*gx();
     const pct=Math.round(mh/mxH*100);
     const bc=mh>70?'#F05252':mh>25?'#F59E0B':'#0FC6BE';
     const z=mh===0;
@@ -1046,6 +1099,7 @@ function openAdd(){
   document.getElementById('fi-preview').textContent='';
   document.getElementById('fi-preview').className='fi-preview';
   document.getElementById('fd').value='';
+  document.getElementById('frefpct').value='';
   document.getElementById('fw').checked=false;
   document.getElementById('fstatus').value='';
   document.getElementById('fpayment').value='';
@@ -1053,6 +1107,7 @@ function openAdd(){
   document.getElementById('ferr').textContent='';
   fillDeliverySelect('');
   document.getElementById('fpaymonth').value='';
+  document.getElementById('fprepaymonth').value='';
   buildM(null);
   document.getElementById('ov').classList.add('open');
   setTimeout(()=>document.getElementById('fs').focus(),150);
@@ -1068,6 +1123,7 @@ function openEdit(){
   document.getElementById('fi').value=p.income;
   onIncomeInput();
   document.getElementById('fd').value=p.dop||'';
+  document.getElementById('frefpct').value=p.refPct||'';
   document.getElementById('fw').checked=!!p.warn;
   document.getElementById('fstatus').value=p.status||'';
   document.getElementById('fpayment').value=p.paymentStatus||'';
@@ -1075,6 +1131,7 @@ function openEdit(){
   document.getElementById('ferr').textContent='';
   fillDeliverySelect(p.deliveryMonth||'');
   document.getElementById('fpaymonth').value=p.paymentMonth||'';
+  document.getElementById('fprepaymonth').value=p.prepaymentMonth||'';
   buildM(p);
   document.getElementById('ov').classList.add('open');
 }
@@ -1096,9 +1153,11 @@ function save(){
     type:document.getElementById('ft').value.trim(),
     income,
     dop:n(parseFloat(document.getElementById('fd').value)||0),
+    refPct:n(parseFloat(document.getElementById('frefpct').value)||0),
     warn:document.getElementById('fw').checked,
     status:document.getElementById('fstatus').value,
     deliveryMonth:document.getElementById('fdelivery').value,
+    prepaymentMonth:document.getElementById('fprepaymonth').value,
     paymentMonth:document.getElementById('fpaymonth').value,
     paymentStatus:document.getElementById('fpayment').value,
     profitShared:document.getElementById('fprofitshared').value,
