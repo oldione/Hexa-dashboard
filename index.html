@@ -1010,6 +1010,16 @@ function renderDet(){
   document.getElementById('ds').textContent=p.site;
   document.getElementById('dm').textContent=[p.client,p.type].filter(Boolean).join(' · ');
 
+  // Вычисляем заранее — нужны и в бейджах, и в KPI
+  const durMonths = monthDiff(p.prepaymentMonth, p.paymentMonth);
+  const durLabel = durMonths !== null
+    ? (durMonths === 0 ? 'в том же месяце' : `${durMonths} мес.`)
+    : null;
+  const refAmt = n(p.refPct) > 0 ? p.income * n(p.refPct) / 100 : 0;
+  const refKpi = refAmt > 0
+    ? `<div class="kpi"><div class="kpi-l">Реферал партнёру</div><div class="kpi-v kpi-ref">$${fmt(refAmt)}</div><div class="kpi-s" style="color:#6B21A8">${n(p.refPct)}% от выручки</div></div>`
+    : '';
+
   // Badges in header
   const wEnd=warrantyEnd(p.deliveryMonth);
   let badges='';
@@ -1033,18 +1043,6 @@ function renderDet(){
   document.getElementById('warranty-row').innerHTML=warr;
 
   const mc2=m>=75?'var(--green)':m>=55?'var(--amber)':'var(--red)';
-
-  // Длительность разработки между предоплатой и финальной оплатой
-  const durMonths = monthDiff(p.prepaymentMonth, p.paymentMonth);
-  const durLabel = durMonths !== null
-    ? (durMonths === 0 ? 'в том же месяце' : `${durMonths} мес.`)
-    : null;
-
-  // Реферал
-  const refAmt = n(p.refPct) > 0 ? p.income * n(p.refPct) / 100 : 0;
-  const refKpi = refAmt > 0
-    ? `<div class="kpi"><div class="kpi-l">Реферал партнёру</div><div class="kpi-v kpi-ref">$${fmt(refAmt)}</div><div class="kpi-s" style="color:#6B21A8">${n(p.refPct)}% от выручки</div></div>`
-    : '';
 
   document.getElementById('dkpi').innerHTML=`
     <div class="kpi"><div class="kpi-l">Выручка</div><div class="kpi-v kv-blue">$${fmt(p.income)}</div>${p.dop>0?`<div class="kpi-s">+ $${fmt(p.dop)} правки</div>`:''}</div>
