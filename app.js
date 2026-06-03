@@ -1,9 +1,17 @@
 const LSK='wbd6',LSR='wbd6r',LSM='wbd6m';
 
 // ─── AUTH ─────────────────────────────────────────────────────
-// Смени пароль здесь:
-const AUTH_PASS = 'Hexa2026';
+// Чтобы сменить пароль — запусти в консоли:
+//   crypto.subtle.digest('SHA-256', new TextEncoder().encode('НовыйПароль'))
+//     .then(b => console.log([...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('')))
+// и вставь результат в AUTH_HASH:
+const AUTH_HASH = '32e0c7d67ef0e643a0d0b7487b98f8c734c1ad58960063d4bef2c8dd20d35614';
 const AUTH_SK = 'wbd_auth';
+
+async function sha256(str){
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+  return [...new Uint8Array(buf)].map(x=>x.toString(16).padStart(2,'0')).join('');
+}
 
 function checkAuth(){
   if(sessionStorage.getItem(AUTH_SK)==='1'){
@@ -11,13 +19,13 @@ function checkAuth(){
     showLoading(true);
     initFirestore();
   }
-  // else: auth wall already visible
 }
 
-function authSubmit(){
+async function authSubmit(){
   const val=document.getElementById('auth-input').value;
   const err=document.getElementById('auth-err');
-  if(val===AUTH_PASS){
+  const hash=await sha256(val);
+  if(hash===AUTH_HASH){
     sessionStorage.setItem(AUTH_SK,'1');
     document.getElementById('auth-wall').classList.add('hidden');
     showLoading(true);
