@@ -13,6 +13,17 @@
 </head>
 <body>
 
+<div class="auth-wall" id="auth-wall">
+  <div class="auth-box">
+    <div class="auth-logo"><div class="logo-i">W</div></div>
+    <div class="auth-title">WebDev Dashboard</div>
+    <div class="auth-sub">Введи пароль для доступа</div>
+    <input class="auth-input" id="auth-input" type="password" placeholder="Пароль" onkeydown="if(event.key==='Enter')authSubmit()">
+    <button class="auth-btn" onclick="authSubmit()">Войти</button>
+    <div class="auth-err" id="auth-err"></div>
+  </div>
+</div>
+
 <div class="drawer-ov" id="drawer-ov" onclick="closeDrawer()"></div>
 
 <header class="mob-hdr">

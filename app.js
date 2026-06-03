@@ -1,4 +1,34 @@
 const LSK='wbd6',LSR='wbd6r',LSM='wbd6m';
+
+// ─── AUTH ─────────────────────────────────────────────────────
+// Смени пароль здесь:
+const AUTH_PASS = 'Hexa2026';
+const AUTH_SK = 'wbd_auth';
+
+function checkAuth(){
+  if(sessionStorage.getItem(AUTH_SK)==='1'){
+    document.getElementById('auth-wall').classList.add('hidden');
+    showLoading(true);
+    initFirestore();
+  }
+  // else: auth wall already visible
+}
+
+function authSubmit(){
+  const val=document.getElementById('auth-input').value;
+  const err=document.getElementById('auth-err');
+  if(val===AUTH_PASS){
+    sessionStorage.setItem(AUTH_SK,'1');
+    document.getElementById('auth-wall').classList.add('hidden');
+    showLoading(true);
+    initFirestore();
+  }else{
+    err.textContent='Неверный пароль';
+    document.getElementById('auth-input').value='';
+    document.getElementById('auth-input').focus();
+    setTimeout(()=>{err.textContent='';},2500);
+  }
+}
 const RU_M=['Янв','Фев','Мар','Апр','Май','Июн','Июл','Авг','Сен','Окт','Ноя','Дек'];
 const DEFAULT_MONTHS=['Авг 25','Сен 25','Окт 25','Ноя 25','Дек 25','Янв 26','Фев 26','Мар 26','Апр 26'];
 
@@ -870,5 +900,4 @@ function applyCalc(){
   onIncomeInput();
 }
 
-showLoading(true);
-initFirestore();
+checkAuth();
