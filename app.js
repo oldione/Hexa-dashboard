@@ -117,8 +117,8 @@ let _saving=false;
 const excludedProjects = new Set();
 
 function normMonths(existing){
-  const map=new Map((existing||[]).map(m=>[m.month,m.hours]));
-  return MONTHS.map(m=>({month:m,hours:n(map.get(m)||0)}));
+  const map=new Map((existing||[]).map(m=>[m.month,m]));
+  return MONTHS.map(m=>{const e=map.get(m)||{};return{month:m,hours:n(e.hours||0),extraIncome:n(e.extraIncome||0)};});
 }
 
 async function persist(){
