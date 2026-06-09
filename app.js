@@ -637,15 +637,32 @@ function switchTab(tab) {
 function computeMonthly() {
   const rate = gr(), x = gx(), delay = gd();
   const stats = {};
-  MONTHS.forEach(m => { stats[m] = {income:0, expense:0, projects:[]}; });
+  MONTHS.forEach(m => { stats[m] = {income:0, expense:0, projects:[], allSites:[]}; });
 
   P.forEach(p => {
-    if (excludedProjects.has(p.id)) return;
+    const excluded = excludedProjects.has(p.id);
+
+    // Собираем полный список сайтов для отображения тегов (независимо от исключения)
+    (p.months || []).forEach(m => {
+      const shifted = delay > 0 ? shiftMonth(m.month, delay) : m.month;
+      if (n(m.hours) > 0 || n(m.extraIncome) > 0) {
+        const target = stats[shifted] ? shifted : m.month;
+        if (stats[target] && !stats[target].allSites.includes(p.site)) stats[target].allSites.push(p.site);
+      }
+    });
+    const prepAmtAll = n(p.prepaymentAmt);
+    if (p.prepaymentMonth && stats[p.prepaymentMonth] && prepAmtAll > 0)
+      if (!stats[p.prepaymentMonth].allSites.includes(p.site)) stats[p.prepaymentMonth].allSites.push(p.site);
+    const incomeMonthAll = p.paymentMonth || p.deliveryMonth;
+    if (incomeMonthAll && stats[incomeMonthAll] && p.income - prepAmtAll > 0)
+      if (!stats[incomeMonthAll].allSites.includes(p.site)) stats[incomeMonthAll].allSites.push(p.site);
+
+    if (excluded) return;
+
     // Расход: часы × ставка, сдвинутые на delay месяцев вперёд
     (p.months || []).forEach(m => {
       const shifted = delay > 0 ? shiftMonth(m.month, delay) : m.month;
       if (stats[shifted]) stats[shifted].expense += n(m.hours) * rate * x;
-      // Доплаты сдвигаются вместе с расходами — деньги за работу месяца приходят тогда же
       if (n(m.extraIncome) > 0) {
         const incMonth = stats[shifted] ? shifted : m.month;
         if (stats[incMonth]) {
@@ -798,7 +815,7 @@ function renderMonthly() {
       <td class="r">${expense > 0 ? '$'+fmt(expense) : '<span style="color:var(--text3)">—</span>'}</td>
       <td class="r ${income>0||expense>0?pc:''}">${income>0||expense>0 ? '$'+fmt(profit) : '<span style="color:var(--text3)">—</span>'}</td>
       <td class="r">${margin !== null ? margin+'%' : '<span style="color:var(--text3)">—</span>'}</td>
-      <td>${projects.length ? projects.map(site => {
+      <td>${stats[m].allSites.length ? stats[m].allSites.map(site => {
         const proj = P.find(p => p.site === site);
         if (!proj) return `<span class="proj-tag"><span class="pt-dot"></span>${site}</span>`;
         const off = excludedProjects.has(proj.id);
