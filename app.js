@@ -643,12 +643,15 @@ function computeMonthly() {
     if (excludedProjects.has(p.id)) return;
     // Расход: часы × ставка, сдвинутые на delay месяцев вперёд
     (p.months || []).forEach(m => {
-      const expMonth = delay > 0 ? shiftMonth(m.month, delay) : m.month;
-      if (stats[expMonth]) stats[expMonth].expense += n(m.hours) * rate * x;
-      // Доплаты за фиксы — всегда в том месяце, где записаны (без сдвига)
-      if (stats[m.month] && n(m.extraIncome) > 0) {
-        stats[m.month].income += n(m.extraIncome);
-        if (!stats[m.month].projects.includes(p.site)) stats[m.month].projects.push(p.site);
+      const shifted = delay > 0 ? shiftMonth(m.month, delay) : m.month;
+      if (stats[shifted]) stats[shifted].expense += n(m.hours) * rate * x;
+      // Доплаты сдвигаются вместе с расходами — деньги за работу месяца приходят тогда же
+      if (n(m.extraIncome) > 0) {
+        const incMonth = stats[shifted] ? shifted : m.month;
+        if (stats[incMonth]) {
+          stats[incMonth].income += n(m.extraIncome);
+          if (!stats[incMonth].projects.includes(p.site)) stats[incMonth].projects.push(p.site);
+        }
       }
     });
 
