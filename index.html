@@ -55,6 +55,13 @@
         <span>$</span>
       </div>
       <div style="font-size:10px;color:rgba(255,255,255,.38);margin-top:6px;font-weight:700;text-align:center">расход: часы × ставка × курс</div>
+      <div style="height:8px"></div>
+      <span class="wlbl">Задержка оплаты счетов</span>
+      <div class="rate-row">
+        <input type="number" id="expdelay" min="0" max="3" step="1" value="0" style="font-size:16px">
+        <span>мес.</span>
+      </div>
+      <div style="font-size:10px;color:rgba(255,255,255,.38);margin-top:4px;font-weight:700;text-align:center">0 = по факту · 1 = счёт след. мес.</div>
     </div>
     <button class="add-btn" onclick="openAdd()">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
@@ -148,6 +155,7 @@
           <th style="padding-left:20px;min-width:70px">Месяц</th>
           <th class="r" style="min-width:70px">Часов</th>
           <th class="r" style="min-width:80px">Расход $</th>
+          <th class="r" style="min-width:60px;color:var(--teal2)">Доплата</th>
           <th class="mob-hide" style="min-width:120px">Активность</th>
         </tr></thead>
         <tbody id="dmon"></tbody>
@@ -162,7 +170,7 @@
 
   <div class="chart-panel">
     <div class="chart-title">Доходы и расходы по месяцам</div>
-    <div class="chart-sub" id="chart-sub">Доход — по месяцу получения оплаты · Расход — часы × ставка€ × курс$/€</div>
+    <div class="chart-sub" id="chart-sub">Доход — предоплата → месяц предоплаты, остаток → месяц оплаты, доплаты → по месяцам · Расход — часы × ставка€ × курс$/€</div>
     <div class="chart-wrap"><canvas id="monthly-chart"></canvas></div>
   </div>
 
@@ -264,11 +272,18 @@
           </select>
         </div>
         <div class="fg">
+          <label>💰 Сумма предоплаты ($)</label>
+          <input class="fi" id="fprepayamt" type="number" min="0" placeholder="0">
+        </div>
+      </div>
+      <div class="fr">
+        <div class="fg">
           <label>📅 Месяц получения оплаты</label>
           <select class="fi" id="fpaymonth">
             <option value="">— не указан —</option>
           </select>
         </div>
+        <div class="fg"></div>
       </div>
       <div class="fr">
         <div class="fg">

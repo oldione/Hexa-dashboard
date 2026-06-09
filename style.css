@@ -227,6 +227,9 @@ select.fi{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.o
 .mc input{padding:8px;border:1.5px solid var(--border2);border-radius:8px;font-size:13px;font-family:'Nunito',sans-serif;font-weight:700;background:var(--bg2);color:var(--text);outline:none;text-align:center;transition:border .14s}
 .mc input:focus{border-color:var(--teal);background:var(--white)}
 .mc.new-month input{border-color:var(--teal);background:#E0FAF9}
+.mc .mc-extra{padding:5px 8px;border:1.5px solid var(--border2);border-radius:8px;font-size:11px;font-family:'Nunito',sans-serif;font-weight:600;background:var(--bg2);color:var(--text2);outline:none;text-align:center;transition:border .14s;width:100%;box-sizing:border-box}
+.mc .mc-extra:focus{border-color:var(--amber);background:var(--white)}
+.mc .mc-extra::placeholder{color:var(--text3)}
 .wr{display:flex;align-items:center;gap:8px;margin-top:4px}
 .wr input{width:16px;height:16px;accent-color:var(--teal);cursor:pointer}
 .wr label{font-size:13px;color:var(--text2);font-weight:600;cursor:pointer}

@@ -129,6 +129,7 @@ async function persist(){
       months:MONTHS,
       rate:gr(),
       eurRate:gx(),
+      expDelay:gd(),
       updatedAt:new Date().toISOString()
     });
     showSync(false);
@@ -157,6 +158,7 @@ function initFirestore(){
     P=(data.projects||[]).map(p=>({...p,months:normMonths(p.months)}));
     if(data.rate) document.getElementById('rate').value=data.rate;
     if(data.eurRate) document.getElementById('eurrate').value=data.eurRate;
+    if(data.expDelay!=null) document.getElementById('expdelay').value=data.expDelay;
     render();
     if(aid&&P.find(p=>p.id===aid)) renderDet();
   }, err=>{
@@ -180,8 +182,9 @@ function addMonth(){
   P.forEach(p=>{if(!p.months.find(m=>m.month===next))p.months.push({month:next,hours:0});});
   persist();
   const curVals=getCurrentModalHoursByName();
+  const curExtra=getCurrentModalExtraByName();
   fillDeliverySelect(document.getElementById('fdelivery').value);
-  buildModalMonths(null,true,curVals);
+  buildModalMonths(null,true,curVals,curExtra);
   toast(`Добавлен: ${next}`);
 }
 
@@ -193,8 +196,9 @@ function addPrevMonth(){
   P.forEach(p=>{if(!p.months.find(m=>m.month===prev))p.months.unshift({month:prev,hours:0});});
   persist();
   const curVals=getCurrentModalHoursByName();
+  const curExtra=getCurrentModalExtraByName();
   fillDeliverySelect(document.getElementById('fdelivery').value);
-  buildModalMonths(null,false,curVals);
+  buildModalMonths(null,false,curVals,curExtra);
   toast(`Добавлен: ${prev}`);
 }
 
@@ -211,26 +215,38 @@ function getCurrentModalHours(){
   return v;
 }
 
-function buildModalMonths(existingVals, highlightLast, byName){
+function buildModalMonths(existingVals, highlightLast, byName, byNameExtra){
   document.getElementById('mins').innerHTML=MONTHS.map((m,i)=>{
     const isNew=highlightLast&&i===MONTHS.length-1;
-    // byName = values keyed by month name (used after add/remove)
-    // existingVals = values keyed by index (legacy)
     let v='';
     if(byName&&byName[m]!==undefined) v=byName[m];
     else if(existingVals&&existingVals[i]!==undefined) v=existingVals[i];
+    let ve='';
+    if(byNameExtra&&byNameExtra[m]!==undefined) ve=byNameExtra[m];
     return`<div class="mc${isNew?' new-month':''}">
       <label>${m}</label>
-      <input type="number" min="0" step="0.25" id="mh${i}" value="${v}" placeholder="0">
+      <input type="number" min="0" step="0.25" id="mh${i}" value="${v}" placeholder="0 ч">
+      <input type="number" min="0" step="0.01" id="me${i}" value="${ve}" placeholder="$ доп" class="mc-extra">
     </div>`;
   }).join('');
 }
 
 function buildM(p){
-  const map=new Map((p?.months||[]).map(m=>[m.month,m.hours]));
+  const mapH=new Map((p?.months||[]).map(m=>[m.month,m.hours]));
+  const mapE=new Map((p?.months||[]).map(m=>[m.month,n(m.extraIncome||0)]));
   const byName={};
-  MONTHS.forEach(m=>{const h=n(map.get(m)||0);byName[m]=h||'';});
-  buildModalMonths(null,false,byName);
+  const byNameExtra={};
+  MONTHS.forEach(m=>{
+    const h=n(mapH.get(m)||0); byName[m]=h||'';
+    const e=n(mapE.get(m)||0); byNameExtra[m]=e||'';
+  });
+  buildModalMonths(null,false,byName,byNameExtra);
+}
+
+function getCurrentModalExtraByName(){
+  const v={};
+  MONTHS.forEach((m,i)=>{const el=document.getElementById('me'+i);if(el)v[m]=el.value;});
+  return v;
 }
 
 function fillDeliverySelect(currentVal){
@@ -245,6 +261,7 @@ function fillDeliverySelect(currentVal){
 
 function gr(){return parseFloat(document.getElementById('rate').value)||20}
 function gx(){return parseFloat(document.getElementById('eurrate').value)||1.08}
+function gd(){return parseInt(document.getElementById('expdelay').value)||0}
 function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2)}
 function n(v){return isNaN(+v)?0:+v}
 function fmt(v){return Math.round(v).toLocaleString('ru-RU')}
@@ -394,7 +411,7 @@ function renderDet(){
   let badges='';
   if(p.status) badges+=`<span class="dh-sbadge">${p.status}</span>`;
   if(p.deliveryMonth) badges+=`<span class="dh-deliv">📅 Сдан: ${p.deliveryMonth}</span>`;
-  if(p.prepaymentMonth) badges+=`<span class="dh-deliv">💰 Предоплата: ${p.prepaymentMonth}</span>`;
+  if(p.prepaymentMonth) badges+=`<span class="dh-deliv">💰 Предоплата: ${p.prepaymentMonth}${n(p.prepaymentAmt)>0?' · $'+fmt(n(p.prepaymentAmt)):''}</span>`;
   if(durLabel) badges+=`<span class="dh-deliv">⏱ Разработка: ${durLabel}</span>`;
   if(p.paymentStatus) badges+=`<span class="dh-pbadge">${p.paymentStatus==='Yes'?'✅':p.paymentStatus==='No'?'❌':'🟡'} ${p.paymentStatus}</span>`;
   if(p.profitShared) badges+=`<span class="dh-pbadge">${p.profitShared==='Да'?'✅':'⏳'} Профит: ${p.profitShared}</span>`;
@@ -424,16 +441,18 @@ function renderDet(){
   document.getElementById('dmon').innerHTML=MONTHS.map(mName=>{
     const entry=p.months.find(x=>x.month===mName);
     const mh=entry?n(entry.hours):0;
+    const me=entry?n(entry.extraIncome||0):0;
     const mc3=mh*r*gx();
     const pct=Math.round(mh/mxH*100);
     const bc=mh>70?'#F05252':mh>25?'#F59E0B':'#0FC6BE';
-    const z=mh===0;
+    const z=mh===0&&me===0;
     const isDeliv=p.deliveryMonth===mName;
     return`<tr class="${z?'zero':''}" style="${isDeliv?'background:#EFF6FF':''}">
       <td style="padding-left:20px">${mName}${isDeliv?` <span style="font-size:10px;color:#1E40AF;font-weight:800">📅 сдача</span>`:''}</td>
-      <td class="r">${z?'—':fh(mh)+' ч'}</td>
-      <td class="r">${z?'—':'$'+fmt(mc3)}</td>
-      <td>${z?'':`<div class="mbi"><div class="mbit"><div class="mbif" style="width:${pct}%;background:${bc}"></div></div></div>`}</td>
+      <td class="r">${mh===0?'—':fh(mh)+' ч'}</td>
+      <td class="r">${mh===0?'—':'$'+fmt(mc3)}</td>
+      <td class="r" style="font-size:11px;color:var(--teal2)">${me>0?'+$'+fmt(me):''}</td>
+      <td>${mh===0?'':`<div class="mbi"><div class="mbit"><div class="mbif" style="width:${pct}%;background:${bc}"></div></div></div>`}</td>
     </tr>`;
   }).join('');
 
@@ -475,6 +494,7 @@ function openAdd(){
   fillDeliverySelect('');
   document.getElementById('fpaymonth').value='';
   document.getElementById('fprepaymonth').value='';
+  document.getElementById('fprepayamt').value='';
   buildM(null);
   document.getElementById('ov').classList.add('open');
   setTimeout(()=>document.getElementById('fs').focus(),150);
@@ -499,6 +519,7 @@ function openEdit(){
   fillDeliverySelect(p.deliveryMonth||'');
   document.getElementById('fpaymonth').value=p.paymentMonth||'';
   document.getElementById('fprepaymonth').value=p.prepaymentMonth||'';
+  document.getElementById('fprepayamt').value=p.prepaymentAmt||'';
   buildM(p);
   document.getElementById('ov').classList.add('open');
 }
@@ -514,7 +535,11 @@ function save(){
   if(!site){document.getElementById('ferr').textContent='Укажи домен';return}
   if(!client){document.getElementById('ferr').textContent='Укажи клиента';return}
   if(income===null||income<0){document.getElementById('ferr').textContent='Укажи корректный доход';return}
-  const months=MONTHS.map((m,i)=>({month:m,hours:n(parseFloat(document.getElementById('mh'+i).value)||0)}));
+  const months=MONTHS.map((m,i)=>({
+    month:m,
+    hours:n(parseFloat(document.getElementById('mh'+i).value)||0),
+    extraIncome:n(parseFloat(document.getElementById('me'+i).value)||0)
+  }));
   const obj={
     id:eid||uid(),site,client,
     type:document.getElementById('ft').value.trim(),
@@ -525,6 +550,7 @@ function save(){
     status:document.getElementById('fstatus').value,
     deliveryMonth:document.getElementById('fdelivery').value,
     prepaymentMonth:document.getElementById('fprepaymonth').value,
+    prepaymentAmt:n(parseFloat(document.getElementById('fprepayamt').value)||0),
     paymentMonth:document.getElementById('fpaymonth').value,
     paymentStatus:document.getElementById('fpayment').value,
     profitShared:document.getElementById('fprofitshared').value,
@@ -546,7 +572,7 @@ function doDel(){P=P.filter(p=>p.id!==did);persist();closeC();closeD();render();
 
 // ─── EXPORT / IMPORT ─────────────────────────────────────────
 function exportData(){
-  const data={projects:P,months:MONTHS,rate:gr(),eurRate:gx(),exportedAt:new Date().toISOString()};
+  const data={projects:P,months:MONTHS,rate:gr(),eurRate:gx(),expDelay:gd(),exportedAt:new Date().toISOString()};
   const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
   const a=document.createElement('a');
   a.href=URL.createObjectURL(blob);
@@ -566,6 +592,7 @@ function importData(e){
         if(data.months) MONTHS=data.months;
         if(data.rate) document.getElementById('rate').value=data.rate;
         if(data.eurRate) document.getElementById('eurrate').value=data.eurRate;
+        if(data.expDelay!=null) document.getElementById('expdelay').value=data.expDelay;
         P.forEach(p=>{p.months=normMonths(p.months);});
         await persist();closeD();render();
         toast(`Импортировано ${P.length} проектов`);
@@ -607,23 +634,50 @@ function switchTab(tab) {
 
 // ─── MONTHLY ANALYTICS ───────────────────────────────────────
 function computeMonthly() {
-  const rate = gr(), x = gx();
+  const rate = gr(), x = gx(), delay = gd();
   const stats = {};
   MONTHS.forEach(m => { stats[m] = {income:0, expense:0, projects:[]}; });
 
   P.forEach(p => {
-    // Расход: часы × ставка€ × курс → $
+    // Расход: часы × ставка, сдвинутые на delay месяцев вперёд
     (p.months || []).forEach(m => {
-      if (stats[m.month]) stats[m.month].expense += n(m.hours) * rate * x;
+      const expMonth = delay > 0 ? shiftMonth(m.month, delay) : m.month;
+      if (stats[expMonth]) stats[expMonth].expense += n(m.hours) * rate * x;
+      // Доплаты за фиксы — всегда в том месяце, где записаны (без сдвига)
+      if (stats[m.month] && n(m.extraIncome) > 0) {
+        stats[m.month].income += n(m.extraIncome);
+        if (!stats[m.month].projects.includes(p.site)) stats[m.month].projects.push(p.site);
+      }
     });
-    // Доход: привязываем к месяцу получения оплаты (не к сдаче)
-    const incomeMonth = p.paymentMonth || p.deliveryMonth; // fallback на сдачу если не указан
-    if (incomeMonth && stats[incomeMonth]) {
-      stats[incomeMonth].income += p.income;
-      stats[incomeMonth].projects.push(p.site);
+
+    // Предоплата → prepaymentMonth
+    const prepAmt = n(p.prepaymentAmt);
+    if (p.prepaymentMonth && stats[p.prepaymentMonth] && prepAmt > 0) {
+      stats[p.prepaymentMonth].income += prepAmt;
+      if (!stats[p.prepaymentMonth].projects.includes(p.site)) stats[p.prepaymentMonth].projects.push(p.site);
+    }
+
+    // Остаток оплаты → paymentMonth (или fallback deliveryMonth)
+    const remaining = p.income - prepAmt;
+    const incomeMonth = p.paymentMonth || p.deliveryMonth;
+    if (incomeMonth && stats[incomeMonth] && remaining > 0) {
+      stats[incomeMonth].income += remaining;
+      if (!stats[incomeMonth].projects.includes(p.site)) stats[incomeMonth].projects.push(p.site);
     }
   });
   return stats;
+}
+
+// Сдвигает строку вида "Авг 25" на +delta месяцев
+function shiftMonth(monthStr, delta){
+  if(!monthStr) return monthStr;
+  const [mon, yr] = monthStr.split(' ');
+  const mi = RU_M.indexOf(mon);
+  if(mi < 0) return monthStr;
+  const total = mi + delta + parseInt(yr) * 12 - 2000 * 12;
+  const newMi = ((total % 12) + 12) % 12;
+  const newYr = Math.floor(total / 12) + 2000;
+  return `${RU_M[newMi]} ${String(newYr).slice(2)}`;
 }
 
 function renderMonthly() {
@@ -634,6 +688,12 @@ function renderMonthly() {
   const incomeData = MONTHS.map(m => Math.round(stats[m].income));
   const expenseData = MONTHS.map(m => Math.round(stats[m].expense));
   const profitData = MONTHS.map((m,i) => incomeData[i] - expenseData[i]);
+
+  // Update subtitle
+  const delay = gd();
+  const delaySub = delay > 0 ? ` · Расход сдвинут +${delay} мес. (оплата счетов)` : '';
+  document.getElementById('chart-sub').textContent =
+    'Доход — предоплата → месяц предоплаты, остаток → месяц оплаты, доплаты → по месяцам · Расход — часы × ставка€ × курс$/€' + delaySub;
 
   // Count projects without paymentMonth (not tracked in chart)
   const noDeliv = P.filter(p => !p.paymentMonth && !p.deliveryMonth);
@@ -778,6 +838,7 @@ function toast(msg){
 // ─── EVENTS ──────────────────────────────────────────────────
 document.getElementById('rate').addEventListener('input',()=>{persist();render();if(aid)renderDet();});
 document.getElementById('eurrate').addEventListener('input',()=>{persist();render();if(aid)renderDet();});
+document.getElementById('expdelay').addEventListener('input',()=>{persist();if(document.getElementById('view-monthly').classList.contains('active'))renderMonthly();});
 document.addEventListener('keydown',e=>{
   if(e.key==='Escape'){
     if(document.getElementById('cov').classList.contains('open')) closeC();
