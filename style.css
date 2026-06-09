@@ -257,6 +257,17 @@ select.fi{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.o
 .chart-sub{font-size:12px;color:var(--text2);margin-bottom:20px;font-weight:600}
 .chart-wrap{position:relative;height:280px}
 
+.monthly-bottom{display:flex;gap:16px;align-items:flex-start}
+.monthly-bottom .month-stats-table{flex:1;min-width:0;margin-bottom:0}
+.month-filter{width:220px;flex-shrink:0}
+.mf-list{padding:8px 10px;display:flex;flex-direction:column;gap:4px;max-height:480px;overflow-y:auto}
+.mf-item{display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:8px;cursor:pointer;transition:background .13s;user-select:none;font-size:12px;font-weight:700;color:var(--text)}
+.mf-item:hover{background:var(--bg2)}
+.mf-item.off{color:var(--text3);text-decoration:line-through}
+.mf-dot{width:8px;height:8px;border-radius:50%;background:var(--teal);flex-shrink:0;transition:background .13s}
+.mf-item.off .mf-dot{background:var(--border2)}
+.mf-reset-btn{font-size:10px;font-weight:800;background:var(--bg2);border:1px solid var(--border2);border-radius:6px;padding:2px 8px;cursor:pointer;color:var(--text2);transition:background .13s}
+.mf-reset-btn:hover{background:var(--border2)}
 .month-stats-table{background:var(--white);border-radius:var(--rl);border:1.5px solid var(--border);box-shadow:var(--shadow);overflow:hidden}
 .month-stats-table table{min-width:500px}
 .total-row td{font-weight:800;background:var(--bg2);border-top:2px solid var(--border2)!important}
@@ -367,4 +378,9 @@ select.fi{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.o
   /* Детальная таблица: скрываем только бар Активности (4-я колонка) */
   .mtbl th:nth-child(4),.mtbl td:nth-child(4){display:none}
   .mbit{max-width:100%}
+}
+@media(max-width:768px){
+  .monthly-bottom{flex-direction:column}
+  .month-filter{width:100%}
+  .mf-list{max-height:none;flex-direction:row;flex-wrap:wrap}
 }

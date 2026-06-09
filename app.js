@@ -114,6 +114,7 @@ const INI=[{"id":"meshquill","site":"meshquill.com","client":"Marina","type":"Cr
 
 let P=[],MONTHS=[],aid=null,eid=null,did=null,fClient='Все',fType='Все',fStatus='Все';
 let _saving=false;
+const excludedProjects = new Set();
 
 function normMonths(existing){
   const map=new Map((existing||[]).map(m=>[m.month,m.hours]));
@@ -639,6 +640,7 @@ function computeMonthly() {
   MONTHS.forEach(m => { stats[m] = {income:0, expense:0, projects:[]}; });
 
   P.forEach(p => {
+    if (excludedProjects.has(p.id)) return;
     // Расход: часы × ставка, сдвинутые на delay месяцев вперёд
     (p.months || []).forEach(m => {
       const expMonth = delay > 0 ? shiftMonth(m.month, delay) : m.month;
@@ -681,6 +683,7 @@ function shiftMonth(monthStr, delta){
 }
 
 function renderMonthly() {
+  renderMonthlyFilter();
   const stats = computeMonthly();
   const rate = gr();
 
@@ -814,6 +817,33 @@ function renderMonthly() {
   } else {
     noteEl.style.display = 'none';
   }
+}
+
+// ─── MONTHLY PROJECT FILTER ──────────────────────────────────
+function renderMonthlyFilter() {
+  const list = document.getElementById('mf-list');
+  if (!list) return;
+  const sorted = [...P].sort((a, b) => a.site.localeCompare(b.site));
+  list.innerHTML = sorted.map(p => {
+    const off = excludedProjects.has(p.id);
+    return `<div class="mf-item${off ? ' off' : ''}" onclick="toggleMonthlyProject('${p.id}')">
+      <div class="mf-dot"></div>
+      <span>${p.site}</span>
+    </div>`;
+  }).join('');
+}
+
+function toggleMonthlyProject(id) {
+  if (excludedProjects.has(id)) excludedProjects.delete(id);
+  else excludedProjects.add(id);
+  renderMonthlyFilter();
+  renderMonthly();
+}
+
+function resetMonthlyFilter() {
+  excludedProjects.clear();
+  renderMonthlyFilter();
+  renderMonthly();
 }
 
 // ─── DRAWER ──────────────────────────────────────────────────
