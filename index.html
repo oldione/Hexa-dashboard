@@ -174,32 +174,25 @@
     <div class="chart-wrap"><canvas id="monthly-chart"></canvas></div>
   </div>
 
-  <div class="monthly-bottom">
-    <div class="month-stats-table panel">
-      <div class="ph"><span class="ph-title">Детализация по месяцам</span></div>
-      <div class="tw">
-        <table>
-          <thead><tr>
-            <th style="min-width:80px">Месяц</th>
-            <th class="r">Доход</th>
-            <th class="r">Расход</th>
-            <th class="r">Профит</th>
-            <th class="r">Маржа</th>
-            <th style="min-width:160px">Сданные проекты</th>
-          </tr></thead>
-          <tbody id="monthly-tbody"></tbody>
-        </table>
-      </div>
-      <div class="no-deliv-note" id="no-deliv-note" style="display:none"></div>
+  <div class="month-stats-table panel">
+    <div class="ph">
+      <span class="ph-title">Детализация по месяцам</span>
+      <button class="mf-reset-btn" id="mf-reset-btn" onclick="resetMonthlyFilter()" style="display:none">Сбросить фильтр</button>
     </div>
-
-    <div class="month-filter panel">
-      <div class="ph">
-        <span class="ph-title">Проекты</span>
-        <button class="mf-reset-btn" onclick="resetMonthlyFilter()" title="Включить все">Сбросить</button>
-      </div>
-      <div class="mf-list" id="mf-list"></div>
+    <div class="tw">
+      <table>
+        <thead><tr>
+          <th style="min-width:80px">Месяц</th>
+          <th class="r">Доход</th>
+          <th class="r">Расход</th>
+          <th class="r">Профит</th>
+          <th class="r">Маржа</th>
+          <th style="min-width:200px">Проекты <span style="font-size:10px;font-weight:600;color:var(--text3)">(клик — отключить)</span></th>
+        </tr></thead>
+        <tbody id="monthly-tbody"></tbody>
+      </table>
     </div>
+    <div class="no-deliv-note" id="no-deliv-note" style="display:none"></div>
   </div>
 
 </div><!-- /view-monthly -->

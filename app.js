@@ -798,7 +798,12 @@ function renderMonthly() {
       <td class="r">${expense > 0 ? '$'+fmt(expense) : '<span style="color:var(--text3)">—</span>'}</td>
       <td class="r ${income>0||expense>0?pc:''}">${income>0||expense>0 ? '$'+fmt(profit) : '<span style="color:var(--text3)">—</span>'}</td>
       <td class="r">${margin !== null ? margin+'%' : '<span style="color:var(--text3)">—</span>'}</td>
-      <td style="font-size:12px;color:var(--text2)">${projects.length ? projects.join(', ') : ''}</td>
+      <td>${projects.length ? projects.map(site => {
+        const proj = P.find(p => p.site === site);
+        if (!proj) return `<span class="proj-tag"><span class="pt-dot"></span>${site}</span>`;
+        const off = excludedProjects.has(proj.id);
+        return `<span class="proj-tag${off?' off':''}" onclick="toggleMonthlyProject('${proj.id}')" title="${off?'Включить':'Отключить'}: ${site}"><span class="pt-dot"></span>${site}</span>`;
+      }).join('') : ''}</td>
     </tr>`;
   }).join('') + `<tr class="total-row">
     <td>ИТОГО</td>
@@ -824,28 +829,18 @@ function renderMonthly() {
 
 // ─── MONTHLY PROJECT FILTER ──────────────────────────────────
 function renderMonthlyFilter() {
-  const list = document.getElementById('mf-list');
-  if (!list) return;
-  const sorted = [...P].sort((a, b) => a.site.localeCompare(b.site));
-  list.innerHTML = sorted.map(p => {
-    const off = excludedProjects.has(p.id);
-    return `<div class="mf-item${off ? ' off' : ''}" onclick="toggleMonthlyProject('${p.id}')">
-      <div class="mf-dot"></div>
-      <span>${p.site}</span>
-    </div>`;
-  }).join('');
+  const btn = document.getElementById('mf-reset-btn');
+  if (btn) btn.style.display = excludedProjects.size > 0 ? 'inline-block' : 'none';
 }
 
 function toggleMonthlyProject(id) {
   if (excludedProjects.has(id)) excludedProjects.delete(id);
   else excludedProjects.add(id);
-  renderMonthlyFilter();
   renderMonthly();
 }
 
 function resetMonthlyFilter() {
   excludedProjects.clear();
-  renderMonthlyFilter();
   renderMonthly();
 }
 
