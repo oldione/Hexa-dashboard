@@ -674,10 +674,10 @@ function shiftMonth(monthStr, delta){
   const [mon, yr] = monthStr.split(' ');
   const mi = RU_M.indexOf(mon);
   if(mi < 0) return monthStr;
-  const total = mi + delta + parseInt(yr) * 12 - 2000 * 12;
+  const total = mi + delta;
   const newMi = ((total % 12) + 12) % 12;
-  const newYr = Math.floor(total / 12) + 2000;
-  return `${RU_M[newMi]} ${String(newYr).slice(2)}`;
+  const newYr = parseInt(yr) + Math.floor(total / 12);
+  return `${RU_M[newMi]} ${String(newYr).padStart(2,'0')}`;
 }
 
 function renderMonthly() {
