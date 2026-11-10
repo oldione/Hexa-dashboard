@@ -4,54 +4,54 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Running the app
 
-No build step. Open `index.html` directly in a browser, or serve the directory with any static file server:
+No build step. Serve the directory with any static file server (Firestore needs http, not file://):
 
 ```bash
 python3 -m http.server 8080
 # then open http://localhost:8080
 ```
 
-All three files (`index.html`, `style.css`, `app.js`) are loaded directly; changes take effect on browser refresh.
+Deployed via GitHub Pages from `main` (https://oldione.github.io/Hexa-dashboard/). `index.html` loads `core.js` then `app.js`.
 
 ## Architecture
 
-Single-page dashboard for tracking freelance web dev projects. Three files, no framework, no bundler.
+Single-page dashboard for freelance web-dev projects. No framework, no bundler.
 
-**Data layer — Firebase Firestore**
-- Config and credentials are hardcoded in `app.js` (lines 6–13).
-- All state lives in a single Firestore document: `webdev/dashboard`.
-- `initFirestore()` sets up an `onSnapshot` listener; every change to global state calls `persist()` which writes the whole document back.
-- `_saving` flag prevents the snapshot listener from overwriting in-flight saves.
-- On first load (document doesn't exist), the app seeds Firestore from the `INI` constant (hardcoded sample projects).
+- `core.js` — **data model v2 and the whole calculation layer** (`globalThis.HexaCore`). Shared by the browser and the MCP server, so formulas exist in one place only. Change calculations here, never duplicate them in `app.js` or `mcp/`.
+- `app.js` — UI: rendering, forms, Firestore sync. Calls `HexaCore` for every number it shows.
+- `mcp/` — MCP server exposing the same data to Claude (see below).
 
-**Global state** (`app.js`)
-- `P` — array of all project objects
-- `MONTHS` — ordered array of month strings like `"Авг 25"`, shared across all projects; adding/removing a month mutates every project's `months` array
-- `aid` / `eid` / `did` — IDs for the currently active/editing/deleting project
-- `fClient` / `fType` / `fStatus` — active filter values
+**Storage — Firestore**, one document `webdev/dashboard` (security rules only allow that doc, so "collections" are arrays inside it; ~45 KB, limit 1 MB). The browser writes the whole doc on every change (`persist()`), `onSnapshot` keeps it live; `_saving` skips the echo of our own write. The UI refuses to write unless `schemaVersion === 2` (an old-format doc shows a blocker banner).
 
-**Project data model**
-Each project has: `id`, `site`, `client`, `type`, `income` (USDT), `dop` (extra costs $), `refPct` (referral % to partner), `warn`, `status`, `deliveryMonth`, `prepaymentMonth`, `prepaymentAmt`, `paymentMonth`, `paymentStatus`, `profitShared`, `note` (free text, edited inline in the table), `months[]` (`{month, hours, extraIncome}`).
+**Schema v2** (`schemaVersion: 2`):
+- `settings`: `rate` (€/h dev default, 20), `costRate` (€/h cost default, 15), `eurRate` (global $/€ fallback), `expDelay`
+- `months[]`: `{month: "Окт 26", eurRate?}` — ordered; per-month rate, falls back to `settings.eurRate`
+- `clients[]`, `types[]`: `{id, name}` directories; names normalized on write via `C.ensureRef` (case/space/trailing-s insensitive)
+- `projects[]`: `id, site, clientId, typeId, status, origin ('own'|'inherited'|'' = unknown), deliveryMonth, dop, refPct, warn, profitShared, note`
+- `hours[]`: `id, projectId, month, hours (real), rate (€/h), kind ('dev'|'cost'), phase ('build'|'support'), phaseManual, note, migrated?`
+- `invoices[]`: `id, projectId, amount, currency ('USD'|'EUR'), issuedAt (YYYY-MM-DD), description, status ('draft'|'sent'|'paid'|'cancelled')`
+- `payments[]`: `id, projectId, invoiceId ('' = unlinked), amount (USDT), receivedAt, month, note`
 
-**Financial formula**
-`expense = hours × rate(€/h) × eurRate($/€)` — rate and eurRate are user-editable inputs in the sidebar, persisted to Firestore.  
-`profit = income − expense − dop − (income × refPct / 100)`
+**Formulas** (`core.js`):
+- entry expense = `hours × rate × monthRate(month)`; project expense = sum of entries
+- `phase` auto: inherited → `support`; else month ≤ `deliveryMonth` (or no deliveryMonth) → `build`, later → `support`. `refreshPhases` re-applies after deliveryMonth/origin change; `phaseManual` entries are left alone.
+- invoiced = active (sent/paid) invoices in USD (EUR × month rate of issue month); received = sum of payments
+- debt = Σ over `sent` invoices of (amount − payments linked to it); `paymentStatus` is computed: not_invoiced / awaiting / partial / paid
+- **profit = received − expense − dop − received × refPct%** (cash basis — matches pre-migration numbers); `expectedProfit` adds outstanding debt
+- monthly: received by payment month, invoiced by issue month, expense by work month shifted by `expDelay`
+- `C.syncInvoiceStatus` flips sent→paid when payments cover an invoice (and back if a payment is removed)
+- `C.clientSummary` groups `inherited` projects separately; `C.receivables`, `C.dataIssues` power the reports
 
-**Income field**
-Accepts plain numbers or arithmetic expressions (`5000+1000`). `evalIncome()` uses `Function()` with a strict character allowlist (`[\d\s+\-*/(). ]+`) to safely evaluate expressions.
+**UI views** (tabs): Projects (filters, cards, table with sticky header and inline notes; the detail panel `#det` lives in `#det-home` and is moved into a `tr.det-row` under the selected row on each `renderTable()` — it must be moved out before `tbody.innerHTML` is rebuilt; it holds editors for hour entries, invoices, payments), Monthly (chart + table with editable per-month rate, add month buttons), Clients (period filter), Receivables, Issues.
 
-**Two views**
-- **Projects** (`view-projects`): filterable card summary + table (`#proj-table`, sticky header on desktop) with an inline notes column. The detail panel `#det` lives in `#det-home` and is moved into a `tr.det-row` right under the selected row on each `renderTable()` — it must be moved out before `tbody.innerHTML` is rebuilt.
-- **Monthly** (`view-monthly`): Chart.js bar+line chart of income/expense/profit per month, plus a breakdown table. Income split is in `incomeSplit(p)`: prepayment → `prepaymentMonth` (falls back to the income month), remainder → `paymentMonth` (falls back to `deliveryMonth`). Only money that lands in no month at all is surfaced as a warning with quick-edit buttons.
-
-**CSS conventions**
-- CSS custom properties defined in `:root` in `style.css`.
-- Status badge classes use Cyrillic slugs: `.s-сдан`, `.s-вработе`, `.s-холд`, `.s-напроверке`, `.s-обсуждение` — match the Cyrillic value strings exactly.
-- Responsive breakpoints: 900px (4→2 cards), 768px (sidebar becomes drawer), 480px (table columns hidden).
-
-**Month management**
-`MONTHS` is the canonical ordered list. `addMonth()` / `addPrevMonth()` append/prepend and call `normMonths()` on all projects to keep the arrays in sync. Modal month inputs are keyed by index (`mh0`, `mh1`, …) but saved by month name to survive index shifts from prepending.
+**CSS conventions**: custom properties in `:root`; status badge classes use Cyrillic slugs (`.s-сдан` …); breakpoints 900px, 768px (sidebar → drawer, sticky header off, tables scroll horizontally), 480px (some columns hidden — selectors target `#proj-table` children by index; update them if columns change).
 
 ## MCP server (`mcp/`)
 
-Exposes the dashboard to Claude as MCP tools. Shared logic in `mcp/src/tools.js`; Firestore access via REST in `mcp/src/store.js` (whole-doc PATCH with `currentDocument.updateTime` precondition + retry, plus a guard that refuses writes losing months or >1 project). Two entry points: `mcp/server.js` (stdio, Claude Code/Desktop, registered via root `.mcp.json`) and `mcp/worker.js` (Cloudflare Worker, Streamable HTTP, secret in URL path `/mcp/<MCP_SECRET>`, used as a claude.ai custom connector). `tools.js` mirrors calc logic from `app.js` (`calc`, `computeMonthly`, `normMonths`, `shiftMonth`, `evalIncome` — the latter is a hand-written parser since Workers forbid `Function()`); keep them in sync. Never test writes against production — mock `fetch` instead. See `mcp/README.md`.
+Exposes the dashboard to Claude. `mcp/src/tools.js` defines the tools on top of `HexaCore` (imported from `../../core.js`); `mcp/src/store.js` talks to Firestore via REST (whole-doc PATCH with `currentDocument.updateTime` precondition + retry). Writes go through `makeIO().mutate(fn, allowShrink)` — a guard refuses writes that drop collections or delete records unless the tool declares it, and refuses any write to a pre-v2 document.
+
+Entry points: `mcp/server.js` (stdio, Claude Code/Desktop via root `.mcp.json`) and `mcp/worker.js` (Cloudflare Worker `hexa-dashboard-mcp`, secret in URL path `/mcp/<MCP_SECRET>`, used as a claude.ai custom connector; deploy with `cd mcp && npx wrangler deploy`).
+
+`mcp/scripts/migrate.mjs` migrated v1 → v2 with per-project/per-month reconciliation; kept for reference.
+
+**Never test writes against the production document** — use the in-memory store / mocked `fetch` and a local copy of the data.

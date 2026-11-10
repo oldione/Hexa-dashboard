@@ -45,20 +45,23 @@
   <div id="nav"></div>
   <div class="sb-bot">
     <div class="rate-w">
-      <span class="wlbl">Ставка Hexabyte</span>
-      <div class="rate-row"><input type="number" id="rate" min="1" max="999" value="20"><span>€/ч</span></div>
+      <span class="wlbl">Ставки по умолчанию</span>
+      <div class="rate-row"><input type="number" id="rate" min="1" max="999" step="0.5" style="font-size:16px"><span>€/ч разраб.</span></div>
+      <div style="height:6px"></div>
+      <div class="rate-row"><input type="number" id="costrate" min="1" max="999" step="0.5" style="font-size:16px"><span>€/ч себест.</span></div>
+      <div style="font-size:10px;color:rgba(255,255,255,.38);margin-top:5px;font-weight:700;text-align:center">для новых записей часов</div>
       <div style="height:8px"></div>
-      <span class="wlbl">Курс евро</span>
+      <span class="wlbl">Общий курс евро</span>
       <div class="rate-row">
         <span style="color:rgba(255,255,255,.65);font-size:13px;font-weight:700">1€ =</span>
-        <input type="number" id="eurrate" min="0.5" max="3" step="0.01" value="1.08" style="font-size:16px">
+        <input type="number" id="eurrate" min="0.5" max="3" step="0.001" style="font-size:16px">
         <span>$</span>
       </div>
-      <div style="font-size:10px;color:rgba(255,255,255,.38);margin-top:6px;font-weight:700;text-align:center">расход: часы × ставка × курс</div>
+      <div style="font-size:10px;color:rgba(255,255,255,.38);margin-top:5px;font-weight:700;text-align:center">если у месяца нет своего курса</div>
       <div style="height:8px"></div>
       <span class="wlbl">Задержка оплаты счетов</span>
       <div class="rate-row">
-        <input type="number" id="expdelay" min="0" max="3" step="1" value="0" style="font-size:16px">
+        <input type="number" id="expdelay" min="0" max="3" step="1" style="font-size:16px">
         <span>мес.</span>
       </div>
       <div style="font-size:10px;color:rgba(255,255,255,.38);margin-top:4px;font-weight:700;text-align:center">0 = по факту · 1 = счёт след. мес.</div>
@@ -72,7 +75,7 @@
       <button class="db" onclick="triggerImport()">⬆ Импорт</button>
     </div>
     <input type="file" id="imp-input" accept=".json" style="display:none" onchange="importData(event)">
-    <div class="storage-note">Данные: localStorage браузера<br>Экспортируй для синхронизации</div>
+    <div class="storage-note">Данные: Firestore · синхронно с Claude</div>
   </div>
 </nav>
 
@@ -81,17 +84,20 @@
   <div class="view-tabs">
     <button class="vtab on" id="tab-projects" onclick="switchTab('projects')">📋 Проекты</button>
     <button class="vtab" id="tab-monthly" onclick="switchTab('monthly')">📅 По месяцам</button>
+    <button class="vtab" id="tab-clients" onclick="switchTab('clients')">👥 Заказчики</button>
+    <button class="vtab" id="tab-receivables" onclick="switchTab('receivables')">💸 Дебиторка <span class="tab-cnt" id="cnt-receivables"></span></button>
+    <button class="vtab" id="tab-issues" onclick="switchTab('issues')">🔎 Проверка <span class="tab-cnt" id="cnt-issues"></span></button>
   </div>
 
   <!-- ═══ PROJECTS VIEW ═══ -->
-  <div class="projects-view" id="view-projects">
+  <div class="view on" id="view-projects">
   <div class="topbar">
     <div class="srch">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
       <input id="search" placeholder="Поиск..." oninput="render()">
     </div>
     <div class="inc-f">
-      <span class="lbl">Доход от</span>
+      <span class="lbl">Получено от</span>
       <input type="number" id="fmin" placeholder="0" oninput="render()">
       <span class="sep">—</span>
       <input type="number" id="fmax" placeholder="∞" oninput="render()">
@@ -108,9 +114,13 @@
   </div>
 
   <!-- Status filter -->
-  <div class="fbar" style="margin-bottom:16px">
+  <div class="fbar">
     <span class="fbar-lbl">Статус:</span>
     <div id="status-pills" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+  </div>
+  <div class="fbar" style="margin-bottom:16px">
+    <span class="fbar-lbl">Оплата:</span>
+    <div id="pay-pills" style="display:flex;gap:6px;flex-wrap:wrap"></div>
   </div>
 
   <div class="cards" id="cards"></div>
@@ -122,7 +132,8 @@
         <thead><tr>
           <th style="min-width:160px">Проект</th>
           <th class="note-th">Заметки</th>
-          <th class="r">Доход</th>
+          <th class="r">Получено</th>
+          <th class="r">Долг</th>
           <th class="r">Часов</th>
           <th class="r">Расход</th>
           <th class="r">Профит</th>
@@ -131,7 +142,7 @@
         <tbody id="tbody"></tbody>
       </table>
     </div>
-    <p class="hint">Нажми на строку — месяца, статусы, оплата</p>
+    <p class="hint">Нажми на строку — часы с описаниями, счета, поступления</p>
   </div>
 
   <!-- Detail panel: хранится здесь, при выборе проекта переносится в строку таблицы под ним -->
@@ -151,29 +162,20 @@
     </div>
     <div id="warranty-row"></div>
     <div class="dkpi" id="dkpi"></div>
-    <div class="tw">
-      <table class="mtbl">
-        <thead><tr>
-          <th style="padding-left:20px;min-width:70px">Месяц</th>
-          <th class="r" style="min-width:70px">Часов</th>
-          <th class="r" style="min-width:80px">Расход $</th>
-          <th class="r" style="min-width:60px;color:var(--teal2)">Доплата</th>
-          <th class="mob-hide" style="min-width:120px">Активность</th>
-        </tr></thead>
-        <tbody id="dmon"></tbody>
-      </table>
-    </div>
+    <div class="dsec" id="dsec-hours"></div>
+    <div class="dsec" id="dsec-invoices"></div>
+    <div class="dsec" id="dsec-payments"></div>
   </div>
   </div><!-- /det-home -->
 
 </div><!-- /view-projects -->
 
 <!-- ═══ MONTHLY VIEW ═══ -->
-<div class="monthly-view" id="view-monthly">
+<div class="view" id="view-monthly">
 
   <div class="chart-panel">
-    <div class="chart-title">Доходы и расходы по месяцам</div>
-    <div class="chart-sub" id="chart-sub">Доход — предоплата → месяц предоплаты, остаток → месяц оплаты, доплаты → по месяцам · Расход — часы × ставка€ × курс$/€</div>
+    <div class="chart-title">Деньги по месяцам</div>
+    <div class="chart-sub" id="chart-sub"></div>
     <div class="chart-wrap"><canvas id="monthly-chart"></canvas></div>
   </div>
 
@@ -181,12 +183,16 @@
     <div class="ph">
       <span class="ph-title">Детализация по месяцам</span>
       <button class="mf-reset-btn" id="mf-reset-btn" onclick="resetMonthlyFilter()" style="display:none">Сбросить фильтр</button>
+      <button class="add-month-btn" style="background:var(--text2)" onclick="addPrevMonth()" type="button">← Прошлый месяц</button>
+      <button class="add-month-btn" onclick="addMonth()" type="button">Следующий месяц →</button>
     </div>
     <div class="tw">
       <table>
         <thead><tr>
           <th style="min-width:80px;white-space:nowrap">Месяц</th>
-          <th class="r">Доход</th>
+          <th class="r" title="Курс $ за € для расходов этого месяца">Курс $/€</th>
+          <th class="r">Выставлено</th>
+          <th class="r">Получено</th>
           <th class="r">Расход</th>
           <th class="r">Профит</th>
           <th class="r">Маржа</th>
@@ -199,6 +205,28 @@
   </div>
 
 </div><!-- /view-monthly -->
+
+<!-- ═══ CLIENTS VIEW ═══ -->
+<div class="view" id="view-clients">
+  <div class="fbar" style="margin-bottom:14px">
+    <span class="fbar-lbl">Период:</span>
+    <select class="fi fi-sm" id="cs-from" onchange="renderClients()"></select>
+    <span class="sep">—</span>
+    <select class="fi fi-sm" id="cs-to" onchange="renderClients()"></select>
+    <button class="btn btn-sm" onclick="document.getElementById('cs-from').value='';document.getElementById('cs-to').value='';renderClients()">Всё время</button>
+  </div>
+  <div id="clients-body"></div>
+</div>
+
+<!-- ═══ RECEIVABLES VIEW ═══ -->
+<div class="view" id="view-receivables">
+  <div id="recv-body"></div>
+</div>
+
+<!-- ═══ DATA ISSUES VIEW ═══ -->
+<div class="view" id="view-issues">
+  <div id="issues-body"></div>
+</div>
 </div><!-- /main -->
 
 <!-- Modal -->
@@ -209,31 +237,20 @@
       <!-- Basic info -->
       <div class="fr">
         <div class="fg"><label>Сайт / домен *</label><input class="fi" id="fs" placeholder="example.com"></div>
-        <div class="fg"><label>Клиент *</label><input class="fi" id="fc" placeholder="Имя клиента"></div>
+        <div class="fg"><label>Заказчик *</label><input class="fi" id="fc" placeholder="Banking" list="dl-clients" autocomplete="off"></div>
       </div>
       <div class="fr">
-        <div class="fg"><label>Тип проекта</label><input class="fi" id="ft" placeholder="CS skins, AI market..."></div>
-        <div class="fg" style="position:relative">
-          <label>Доход (USDT) *</label>
-          <div class="fi-wrap">
-            <input class="fi" id="fi" type="text" placeholder="0 или 5000+1000" oninput="onIncomeInput()" onblur="onIncomeBlur()">
-            <button class="fi-calc-btn" type="button" onclick="toggleCalcPopup(event)" title="Калькулятор сложения">＋</button>
-          </div>
-          <div class="fi-preview" id="fi-preview"></div>
-          <div class="calc-popup" id="calc-popup">
-            <div class="calc-popup-title">Сложить суммы</div>
-            <div class="calc-lines" id="calc-lines"></div>
-            <div class="calc-total">
-              <span class="calc-total-lbl">Итого</span>
-              <span class="calc-total-val" id="calc-total-val">$0</span>
-            </div>
-            <div class="calc-actions">
-              <button class="calc-add-line" type="button" onclick="addCalcLine()">+ Добавить сумму</button>
-              <button class="calc-apply" type="button" onclick="applyCalc()">Применить</button>
-            </div>
-          </div>
+        <div class="fg"><label>Тип проекта</label><input class="fi" id="ft" placeholder="Game key, landing…" list="dl-types" autocomplete="off"></div>
+        <div class="fg">
+          <label>Происхождение</label>
+          <select class="fi" id="forigin">
+            <option value="own">Свой — строили сами</option>
+            <option value="inherited">Чужой — взяли на поддержку</option>
+            <option value="">— не указано —</option>
+          </select>
         </div>
       </div>
+      <datalist id="dl-clients"></datalist><datalist id="dl-types"></datalist>
       <div class="fr">
         <div class="fg"><label>Доп. расход / правки ($)</label><input class="fi" id="fd" type="number" min="0" placeholder="0"></div>
         <div class="fg">
@@ -244,7 +261,6 @@
           </div>
         </div>
       </div>
-
       <div class="fr">
         <div class="fg" style="justify-content:flex-end"><div class="wr"><input type="checkbox" id="fw"><label for="fw">⚠ Пометить как неполные данные</label></div></div>
       </div>
@@ -255,8 +271,7 @@
         </div>
       </div>
 
-      <!-- Status section -->
-      <div class="section-divider">Статус и оплата</div>
+      <div class="section-divider">Статус</div>
       <div class="fr">
         <div class="fg">
           <label>Статус проекта</label>
@@ -270,43 +285,11 @@
           </select>
         </div>
         <div class="fg">
-          <label>Месяц сдачи (для гарантии)</label>
-          <select class="fi" id="fdelivery">
-            <option value="">— не указан —</option>
-          </select>
+          <label>Месяц сдачи (граница build / support)</label>
+          <select class="fi" id="fdelivery"></select>
         </div>
       </div>
       <div class="fr">
-        <div class="fg">
-          <label>💰 Месяц предоплаты</label>
-          <select class="fi" id="fprepaymonth">
-            <option value="">— не указан —</option>
-          </select>
-        </div>
-        <div class="fg">
-          <label>💰 Сумма предоплаты ($)</label>
-          <input class="fi" id="fprepayamt" type="number" min="0" placeholder="0">
-        </div>
-      </div>
-      <div class="fr">
-        <div class="fg">
-          <label>📅 Месяц получения оплаты</label>
-          <select class="fi" id="fpaymonth">
-            <option value="">— не указан —</option>
-          </select>
-        </div>
-        <div class="fg"></div>
-      </div>
-      <div class="fr">
-        <div class="fg">
-          <label>Статус оплаты</label>
-          <select class="fi" id="fpayment">
-            <option value="">— не задан —</option>
-            <option value="Yes">✅ Оплачен (Yes)</option>
-            <option value="partially paid">🟡 Частично оплачен</option>
-            <option value="No">❌ Не оплачен (No)</option>
-          </select>
-        </div>
         <div class="fg">
           <label>Профит поделен</label>
           <select class="fi" id="fprofitshared">
@@ -315,17 +298,17 @@
             <option value="Нет">⏳ Нет</option>
           </select>
         </div>
+        <div class="fg"></div>
       </div>
 
-      <!-- Months -->
-      <div class="section-divider">
-        <span>Часы Hexabyte по месяцам</span>
-        <div style="display:flex;gap:6px">
-          <button class="add-month-btn" style="background:var(--text2)" onclick="addPrevMonth()" type="button">← Добавить прошлый</button>
-          <button class="add-month-btn" onclick="addMonth()" type="button">+ Следующий →</button>
+      <div id="new-invoice-block">
+        <div class="section-divider">Счёт (необязательно)</div>
+        <div class="fr">
+          <div class="fg"><label>Сумма счёта</label><input class="fi" id="finvamt" type="text" placeholder="0 или 2101+2101"></div>
+          <div class="fg"><label>Валюта</label><select class="fi" id="finvcur"><option>USD</option><option>EUR</option></select></div>
         </div>
+        <div style="font-size:11px;color:var(--text3);font-weight:600;margin:-6px 0 6px">Будет выставлен счёт со статусом «отправлен» на сегодняшнюю дату. Деньги потом — через «Поступления» в карточке проекта.</div>
       </div>
-      <div class="mg" id="mins"></div>
     </div>
     <div class="mfoot">
       <div class="mfl" id="ferr"></div>
@@ -351,6 +334,7 @@
 <div class="loading" id="loading"><div class="loading-spinner"></div><div class="loading-txt">Загрузка данных...</div></div>
 <div class="sync-dot" id="sync-dot">💾 Сохранение...</div>
 
+<script src="core.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

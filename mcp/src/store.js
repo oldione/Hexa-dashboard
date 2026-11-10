@@ -3,10 +3,10 @@
 // изменили в браузере между чтением и записью, операция повторяется на свежих данных.
 
 const PROJECT = 'hexa-web-dev';
-const API_KEY = 'AIzaSyAy2dKkjq0mukLj_JO8Iqz5ebnca7ZMIQw';
+export const API_KEY = 'AIzaSyAy2dKkjq0mukLj_JO8Iqz5ebnca7ZMIQw';
 // DASHBOARD_DOC можно переопределить для тестов (например webdev/mcp-test), по умолчанию — боевой документ.
 const DOC_PATH = (typeof process !== 'undefined' && process.env?.DASHBOARD_DOC) || 'webdev/dashboard';
-const DOC_URL = `https://firestore.googleapis.com/v1/projects/${PROJECT}/databases/(default)/documents/${DOC_PATH}`;
+export const DOC_URL = `https://firestore.googleapis.com/v1/projects/${PROJECT}/databases/(default)/documents/${DOC_PATH}`;
 
 function decode(v) {
   if (v == null) return null;
@@ -20,7 +20,7 @@ function decode(v) {
   if ('mapValue' in v) return decodeFields(v.mapValue.fields || {});
   return null;
 }
-const decodeFields = f => Object.fromEntries(Object.entries(f).map(([k, v]) => [k, decode(v)]));
+export const decodeFields = f => Object.fromEntries(Object.entries(f).map(([k, v]) => [k, decode(v)]));
 
 function encode(v) {
   if (v === null || v === undefined) return { nullValue: null };
@@ -59,4 +59,14 @@ export async function mutate(fn) {
     throw new Error(`Firestore write ${r.status}: ${text.slice(0, 300)}`);
   }
   throw new Error('Не удалось сохранить: документ постоянно меняется, попробуй ещё раз.');
+}
+
+// Записать документ целиком, только если он не менялся с момента чтения (updateTime).
+export async function writeRaw(data, updateTime) {
+  const r = await fetch(
+    `${DOC_URL}?key=${API_KEY}&currentDocument.updateTime=${encodeURIComponent(updateTime)}`,
+    { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ fields: encodeFields(data) }) },
+  );
+  if (!r.ok) throw new Error(`Firestore write ${r.status}: ${(await r.text()).slice(0, 300)}`);
+  return r.json();
 }
