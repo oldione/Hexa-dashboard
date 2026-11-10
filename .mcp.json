@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "hexa-dashboard": {
+      "command": "node",
+      "args": ["mcp/server.js"]
+    }
+  }
+}
