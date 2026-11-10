@@ -26,6 +26,7 @@ body{font-family:'Nunito',sans-serif;background:var(--bg);color:var(--text);marg
 .s-вработе{background:var(--amber-bg);color:var(--amber-txt)}.s-вработе::before{background:var(--amber)}
 .s-холд{background:var(--red-bg);color:var(--red-txt)}.s-холд::before{background:var(--red)}
 .s-напроверке{background:var(--blue-bg);color:var(--blue-txt)}.s-напроверке::before{background:var(--blue)}
+.s-наобслуживании{background:#F3E8FF;color:#6B21A8}.s-наобслуживании::before{background:#8B5CF6}
 .s-обсуждение{background:var(--slate-bg);color:var(--slate-txt)}.s-обсуждение::before{background:#94A3B8}
 .s-default{background:var(--bg2);color:var(--text3)}.s-default::before{background:var(--text3)}
 
@@ -115,6 +116,7 @@ body{font-family:'Nunito',sans-serif;background:var(--bg);color:var(--text);marg
 .spill.on.ss-вработе{background:var(--amber-bg);color:var(--amber-txt);border-color:var(--amber)}
 .spill.on.ss-холд{background:var(--red-bg);color:var(--red-txt);border-color:var(--red)}
 .spill.on.ss-напроверке{background:var(--blue-bg);color:var(--blue-txt);border-color:var(--blue)}
+.spill.on.ss-наобслуживании{background:#F3E8FF;color:#6B21A8;border-color:#8B5CF6}
 .spill.on.ss-обсуждение{background:var(--slate-bg);color:var(--slate-txt);border-color:#94A3B8}
 .spill-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
 

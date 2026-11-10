@@ -64,6 +64,7 @@ const STATUSES=[
   {val:'В работе',   cls:'вработе',    dot:'#F59E0B', bg:'#FFFBEB', color:'#854D0E'},
   {val:'Холд',       cls:'холд',       dot:'#F05252', bg:'#FEE2E2', color:'#991B1B'},
   {val:'На проверке',cls:'напроверке', dot:'#3B82F6', bg:'#EFF6FF', color:'#1E40AF'},
+  {val:'На обслуживании',cls:'наобслуживании', dot:'#8B5CF6', bg:'#F3E8FF', color:'#6B21A8'},
   {val:'Обсуждение', cls:'обсуждение', dot:'#94A3B8', bg:'#F1F5F9', color:'#475569'},
 ];
 const PAY={
@@ -81,7 +82,7 @@ const ISSUE_TITLES={
   hours_no_note:'Запись часов без описания',
   month_no_rate:'Месяц без своего курса',
   delivered_no_month:'«Сдан», но нет месяца сдачи',
-  support_not_invoiced:'Часы поддержки без счёта в том же месяце',
+  support_not_invoiced:'Часы поддержки, не покрытые счётом',
   build_after_delivery:'Часы «разработки» после сдачи',
   origin_unknown:'Не указано: свой проект или чужой',
   needs_full_invoice:'Нужен счёт на полную сумму',
@@ -355,6 +356,7 @@ function renderDet(){
   badges+=`<span class="dh-pbadge">${PAY[s.paymentStatus].label}</span>`;
   badges+=`<span class="dh-deliv">${p.origin==='inherited'?'↪ Чужой, на поддержке':p.origin==='own'?'🏗 Свой проект':'❓ Происхождение не указано'}</span>`;
   if(p.deliveryMonth) badges+=`<span class="dh-deliv">📅 Сдан: ${p.deliveryMonth}</span>`;
+  if(p.supportIncluded) badges+=`<span class="dh-deliv">🛠 Поддержка в стоимости</span>`;
   if(p.profitShared) badges+=`<span class="dh-pbadge">${p.profitShared==='Да'?'✅':'⏳'} Профит: ${p.profitShared}</span>`;
   if(s.referral>0) badges+=`<span class="dh-deliv" style="background:rgba(167,139,250,.25)">🤝 Реферал: ${n(p.refPct)}% = $${fmt(s.referral)}</span>`;
   $('dh-badges').innerHTML=badges;
@@ -535,7 +537,7 @@ function openAdd(){
   $('mtitle').textContent='Новый проект';
   for(const id of ['fs','fc','ft','fd','frefpct','fnote','finvamt']) $(id).value='';
   if(fClient) $('fc').value=C.refName(D.clients,fClient);
-  $('forigin').value='own';$('fw').checked=false;$('fstatus').value='Обсуждение';$('fprofitshared').value='';
+  $('forigin').value='own';$('fw').checked=false;$('fsupinc').checked=false;$('fstatus').value='Обсуждение';$('fprofitshared').value='';
   $('fdelivery').innerHTML=monthOptions('','— не указан —');
   $('new-invoice-block').style.display='';$('finvcur').value='USD';
   $('ferr').textContent='';
@@ -548,7 +550,7 @@ function openEdit(){
   $('mtitle').textContent='Редактировать проект';
   $('fs').value=p.site;$('fc').value=clientName(p);$('ft').value=typeName(p);
   $('forigin').value=p.origin||'';$('fd').value=p.dop||'';$('frefpct').value=p.refPct||'';
-  $('fw').checked=!!p.warn;$('fstatus').value=p.status||'';$('fprofitshared').value=p.profitShared||'';
+  $('fw').checked=!!p.warn;$('fsupinc').checked=!!p.supportIncluded;$('fstatus').value=p.status||'';$('fprofitshared').value=p.profitShared||'';
   $('fnote').value=p.note||'';
   $('fdelivery').innerHTML=monthOptions(p.deliveryMonth||'','— не указан —');
   $('new-invoice-block').style.display='none';
@@ -569,14 +571,14 @@ function save(){
   }
   let p=eid?proj(eid):null;
   if(!p){p={id:C.uid()};D.projects.push(p);}
-  const before={d:p.deliveryMonth,o:p.origin};
+  const before={d:p.deliveryMonth,o:p.origin,s:p.status};
   Object.assign(p,{
     site, clientId:C.ensureRef(D.clients,client), typeId:C.ensureRef(D.types,$('ft').value),
     origin:$('forigin').value, status:$('fstatus').value, deliveryMonth:$('fdelivery').value,
-    dop:n($('fd').value), refPct:n($('frefpct').value), warn:$('fw').checked,
+    dop:n($('fd').value), refPct:n($('frefpct').value), warn:$('fw').checked, supportIncluded:$('fsupinc').checked,
     profitShared:$('fprofitshared').value, note:$('fnote').value.replace(/\s+$/,''),
   });
-  if(before.d!==p.deliveryMonth||before.o!==p.origin) C.refreshPhases(D,p.id);
+  if(before.d!==p.deliveryMonth||before.o!==p.origin||before.s!==p.status) C.refreshPhases(D,p.id);
   if(invAmt) D.invoices.push({id:'i'+C.uid(),projectId:p.id,amount:invAmt,currency:$('finvcur').value,issuedAt:C.todayISO(),description:'Разработка',status:'sent'});
   persist();closeM();aid=p.id;render();
 }

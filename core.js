@@ -6,7 +6,8 @@
 
   const SCHEMA_VERSION = 2;
   const RU_M = ['Янв','Фев','Мар','Апр','Май','Июн','Июл','Авг','Сен','Окт','Ноя','Дек'];
-  const STATUSES = ['Сдан', 'В работе', 'Холд', 'На проверке', 'Обсуждение'];
+  const STATUSES = ['Сдан', 'В работе', 'Холд', 'На проверке', 'На обслуживании', 'Обсуждение'];
+  const MAINTENANCE = 'На обслуживании'; // чужие или только сопровождаемые: сдачи не было
   const INVOICE_STATUSES = ['draft', 'sent', 'paid', 'cancelled'];
   const PAY_STATUSES = ['not_invoiced', 'awaiting', 'partial', 'paid'];
   const PAY_STATUS_LABEL = { not_invoiced: 'Без счёта', awaiting: 'Ждём оплату', partial: 'Частично', paid: 'Оплачен' };
@@ -79,9 +80,9 @@
   function defaultRate(data, kind) {
     return kind === 'cost' ? n(data.settings.costRate) || 15 : n(data.settings.rate) || 20;
   }
-  // Фаза по умолчанию: чужой проект — всегда support; свой — build до месяца сдачи включительно.
+  // Фаза по умолчанию: чужой проект или «На обслуживании» — всегда support; свой — build до месяца сдачи включительно.
   function autoPhase(project, month) {
-    if (project && project.origin === 'inherited') return 'support';
+    if (project && (project.origin === 'inherited' || project.status === MAINTENANCE)) return 'support';
     if (!project || !project.deliveryMonth || !isMonth(project.deliveryMonth)) return 'build';
     return cmpMonth(month, project.deliveryMonth) <= 0 ? 'build' : 'support';
   }
@@ -300,15 +301,21 @@
         const s = projectStats(data, p);
         add('hours_no_invoices', `${p.site}: есть часы, нет счетов`, { projectId: p.id, site: p.site, hours: s.hours, amount: s.profit });
       }
-      if (p.status === 'Сдан' && !p.deliveryMonth) add('delivered_no_month', `${p.site}: статус «Сдан», но не указан месяц сдачи`, { projectId: p.id, site: p.site });
+      if (p.status === 'Сдан' && !p.deliveryMonth) // «На обслуживании» сюда не попадает — у него сдачи не было add('delivered_no_month', `${p.site}: статус «Сдан», но не указан месяц сдачи`, { projectId: p.id, site: p.site });
       if (!p.origin) add('origin_unknown', `${p.site}: не указано происхождение (свой / чужой)`, { projectId: p.id, site: p.site });
       if (p.needsFullInvoice) add('needs_full_invoice', `${p.site}: частично оплачен — выставь счёт на полную сумму`, { projectId: p.id, site: p.site });
-      // support-часы без счёта, выставленного в тот же месяц
-      const invMonths = new Set(invs.map(i => dateToMonth(i.issuedAt)));
-      const supMonths = [...new Set(hrs.filter(h => h.phase === 'support').map(h => h.month))].filter(m => !invMonths.has(m)).sort(cmpMonth);
-      if (supMonths.length && invs.length) {
-        const h = hrs.filter(x => x.phase === 'support' && supMonths.includes(x.month)).reduce((s, x) => s + n(x.hours), 0);
-        add('support_not_invoiced', `${p.site}: часы поддержки без счёта в том же месяце (${supMonths.join(', ')})`, { projectId: p.id, site: p.site, months: supMonths, hours: r2(h) });
+      // Часы поддержки, не покрытые ни одним счётом проекта: работа после месяца последнего счёта.
+      // Считается по проекту целиком; фикс-прайс с поддержкой внутри (supportIncluded) не проверяется.
+      // Проекты совсем без счетов уже попадают в hours_no_invoices.
+      if (!p.supportIncluded && invs.length) {
+        const lastInv = invs.map(i => dateToMonth(i.issuedAt)).filter(isMonth).sort(cmpMonth).pop();
+        const open = hrs.filter(h => h.phase === 'support' && (!lastInv || cmpMonth(h.month, lastInv) > 0));
+        if (open.length) {
+          const months = [...new Set(open.map(h => h.month))].sort(cmpMonth);
+          const h = open.reduce((s, x) => s + n(x.hours), 0);
+          const usd = open.reduce((s, x) => s + entryCostUSD(data, x), 0);
+          add('support_not_invoiced', `${p.site}: ${r2(h)} ч поддержки после последнего счёта (${lastInv}) не покрыты счётом — ${months.join(', ')}`, { projectId: p.id, site: p.site, months, hours: r2(h), amount: -r2(usd), lastInvoiceMonth: lastInv });
+        }
       }
       if (p.deliveryMonth && isMonth(p.deliveryMonth) && p.origin !== 'inherited') {
         const late = hrs.filter(h => h.phase === 'build' && cmpMonth(h.month, p.deliveryMonth) > 0);
@@ -407,7 +414,7 @@
   }
 
   root.HexaCore = {
-    SCHEMA_VERSION, RU_M, STATUSES, INVOICE_STATUSES, PAY_STATUSES, PAY_STATUS_LABEL, KINDS, PHASES, ORIGINS, OVERDUE_DAYS,
+    SCHEMA_VERSION, RU_M, STATUSES, MAINTENANCE, INVOICE_STATUSES, PAY_STATUSES, PAY_STATUS_LABEL, KINDS, PHASES, ORIGINS, OVERDUE_DAYS,
     n, r2, uid, parseMonth, isMonth, monthIdx, idxToMonth, shiftMonth, cmpMonth, monthToDate, dateToMonth, todayISO, daysBetween, inPeriod,
     normKey, findRef, ensureRef, refName,
     monthRate, defaultRate, autoPhase, refreshPhases, syncInvoiceStatus, entryCostEUR, entryCostUSD, invoiceUSD, isActiveInvoice,

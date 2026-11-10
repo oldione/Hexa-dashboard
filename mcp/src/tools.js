@@ -88,7 +88,7 @@ function projectBrief(data, p, opt) {
   const s = C.projectStats(data, p, opt);
   return {
     id: p.id, site: p.site, client: clientName(data, p), type: typeName(data, p), status: p.status,
-    origin: p.origin || '(не указано)', deliveryMonth: p.deliveryMonth,
+    origin: p.origin || '(не указано)', deliveryMonth: p.deliveryMonth, supportIncluded: !!p.supportIncluded,
     invoiced: s.invoiced, received: s.received, debt: s.debt, paymentStatus: s.paymentStatus,
     hours: s.hours, hoursByPhase: { build: s.byPhase.build.hours, support: s.byPhase.support.hours },
     hoursByKind: { dev: s.byKind.dev.hours, cost: s.byKind.cost.hours },
@@ -133,7 +133,7 @@ const ISSUE_LABELS = {
   hours_no_note: 'Запись часов без описания',
   month_no_rate: 'Месяц без своего курса',
   delivered_no_month: '«Сдан» без месяца сдачи',
-  support_not_invoiced: 'Часы поддержки без счёта в том же месяце',
+  support_not_invoiced: 'Часы поддержки, не покрытые счётом',
   build_after_delivery: 'Часы build после месяца сдачи',
   origin_unknown: 'Не указано происхождение (own / inherited)',
   needs_full_invoice: 'Нужен счёт на полную сумму',
@@ -226,14 +226,15 @@ export function createServer(store) {
     refPct: z.number().min(0).max(100).optional().describe('% реферала партнёру'),
     warn: z.boolean().optional(), profitShared: z.enum(['Да', 'Нет']).optional(),
     note: z.string().optional().describe('Заметка (заменяет целиком)'),
+    supportIncluded: z.boolean().optional().describe('Поддержка входит в стоимость разработки (фикс-прайс) — проверка support_not_invoiced не срабатывает'),
   };
   function applyProject(d, p, f) {
     if (f.deliveryMonth) checkMonth(d, f.deliveryMonth, 'deliveryMonth');
     if (f.client !== undefined) p.clientId = resolveRef(d.clients, f.client, f.createClient, 'Заказчика', 'createClient');
     if (f.type !== undefined) p.typeId = resolveRef(d.types, f.type, f.createType, 'Типа', 'createType');
-    for (const k of ['status', 'origin', 'deliveryMonth', 'warn', 'profitShared', 'note']) if (f[k] !== undefined) p[k] = f[k];
+    for (const k of ['status', 'origin', 'deliveryMonth', 'warn', 'profitShared', 'note', 'supportIncluded']) if (f[k] !== undefined) p[k] = f[k];
     for (const k of ['dop', 'refPct']) if (f[k] !== undefined) p[k] = n(f[k]);
-    if (f.deliveryMonth !== undefined || f.origin !== undefined) C.refreshPhases(d, p.id);
+    if (f.deliveryMonth !== undefined || f.origin !== undefined || f.status !== undefined) C.refreshPhases(d, p.id);
   }
 
   server.registerTool('add_project', {
@@ -242,7 +243,7 @@ export function createServer(store) {
     inputSchema: { site: z.string(), ...projectFields, client: z.string() },
   }, wrap(async ({ site, ...f }) => ok(await mutate(d => {
     if (d.projects.some(p => p.site.toLowerCase() === site.trim().toLowerCase())) throw new Error(`${site} уже есть`);
-    const p = { id: C.uid(), site: site.trim(), clientId: '', typeId: '', status: 'Обсуждение', origin: 'own', deliveryMonth: '', dop: 0, refPct: 0, warn: false, profitShared: 'Нет', note: '' };
+    const p = { id: C.uid(), site: site.trim(), clientId: '', typeId: '', status: 'Обсуждение', origin: 'own', deliveryMonth: '', dop: 0, refPct: 0, warn: false, profitShared: 'Нет', note: '', supportIncluded: false };
     d.projects.push(p);
     applyProject(d, p, f);
     return { created: projectBrief(d, p) };
@@ -250,7 +251,7 @@ export function createServer(store) {
 
   server.registerTool('update_project', {
     title: 'Изменить проект',
-    description: 'Меняет поля проекта (только переданные). Смена deliveryMonth/origin пересчитывает авто-фазы часов.',
+    description: 'Меняет поля проекта (только переданные). Смена deliveryMonth / origin / status пересчитывает авто-фазы часов («На обслуживании» и чужие — support).',
     inputSchema: { project: projectF, site: z.string().optional().describe('Новый домен'), ...projectFields },
   }, wrap(async ({ project, site, ...f }) => ok(await mutate(d => {
     const p = findProject(d, project);
@@ -524,7 +525,7 @@ export function createServer(store) {
 
   server.registerTool('data_issues', {
     title: 'Проблемы в данных',
-    description: 'Проверки: часы без счетов, счета sent старше 30 дней, поступления без счёта, записи часов без описания, месяцы без своего курса, «Сдан» без месяца сдачи, support-часы без счёта в том же месяце, build-часы после сдачи, не указано происхождение.',
+    description: 'Проверки: часы без счетов, счета sent старше 30 дней, поступления без счёта, записи часов без описания, месяцы без своего курса, «Сдан» без месяца сдачи, support-часы после последнего счёта проекта (кроме supportIncluded), build-часы после сдачи, не указано происхождение.',
     inputSchema: { code: z.enum(ISSUE_CODES).optional().describe('Только проблемы с этим кодом') },
   }, wrap(async ({ code }) => {
     const d = await load();

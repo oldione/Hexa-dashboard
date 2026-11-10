@@ -27,20 +27,20 @@ Single-page dashboard for freelance web-dev projects. No framework, no bundler.
 - `settings`: `rate` (€/h dev default, 20), `costRate` (€/h cost default, 15), `eurRate` (global $/€ fallback), `expDelay`
 - `months[]`: `{month: "Окт 26", eurRate?}` — ordered; per-month rate, falls back to `settings.eurRate`
 - `clients[]`, `types[]`: `{id, name}` directories; names normalized on write via `C.ensureRef` (case/space/trailing-s insensitive)
-- `projects[]`: `id, site, clientId, typeId, status, origin ('own'|'inherited'|'' = unknown), deliveryMonth, dop, refPct, warn, profitShared, note`
+- `projects[]`: `id, site, clientId, typeId, status, origin ('own'|'inherited'|'' = unknown), deliveryMonth, dop, refPct, warn, profitShared, note, supportIncluded` (support is part of the fixed price → no support_not_invoiced check)
 - `hours[]`: `id, projectId, month, hours (real), rate (€/h), kind ('dev'|'cost'), phase ('build'|'support'), phaseManual, note, migrated?`
 - `invoices[]`: `id, projectId, amount, currency ('USD'|'EUR'), issuedAt (YYYY-MM-DD), description, status ('draft'|'sent'|'paid'|'cancelled')`
 - `payments[]`: `id, projectId, invoiceId ('' = unlinked), amount (USDT), receivedAt, month, note`
 
 **Formulas** (`core.js`):
 - entry expense = `hours × rate × monthRate(month)`; project expense = sum of entries
-- `phase` auto: inherited → `support`; else month ≤ `deliveryMonth` (or no deliveryMonth) → `build`, later → `support`. `refreshPhases` re-applies after deliveryMonth/origin change; `phaseManual` entries are left alone.
+- `phase` auto: inherited or status «На обслуживании» → `support`; else month ≤ `deliveryMonth` (or no deliveryMonth) → `build`, later → `support`. `refreshPhases` re-applies after deliveryMonth/origin change; `phaseManual` entries are left alone.
 - invoiced = active (sent/paid) invoices in USD (EUR × month rate of issue month); received = sum of payments
 - debt = Σ over `sent` invoices of (amount − payments linked to it); `paymentStatus` is computed: not_invoiced / awaiting / partial / paid
 - **profit = received − expense − dop − received × refPct%** (cash basis — matches pre-migration numbers); `expectedProfit` adds outstanding debt
 - monthly: received by payment month, invoiced by issue month, expense by work month shifted by `expDelay`
 - `C.syncInvoiceStatus` flips sent→paid when payments cover an invoice (and back if a payment is removed)
-- `C.clientSummary` groups `inherited` projects separately; `C.receivables`, `C.dataIssues` power the reports
+- `C.clientSummary` groups `inherited` projects separately; `C.receivables`, `C.dataIssues` power the reports. `support_not_invoiced` is per project: support hours after the month of the project's last active invoice, skipped for `supportIncluded`
 
 **UI views** (tabs): Projects (filters, cards, table with sticky header and inline notes; the detail panel `#det` lives in `#det-home` and is moved into a `tr.det-row` under the selected row on each `renderTable()` — it must be moved out before `tbody.innerHTML` is rebuilt; it holds editors for hour entries, invoices, payments), Monthly (chart + table with editable per-month rate, add month buttons), Clients (period filter), Receivables, Issues.
 
