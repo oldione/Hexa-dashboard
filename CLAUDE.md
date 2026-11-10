@@ -31,7 +31,7 @@ Single-page dashboard for tracking freelance web dev projects. Three files, no f
 - `fClient` / `fType` / `fStatus` — active filter values
 
 **Project data model**
-Each project has: `id`, `site`, `client`, `type`, `income` (USDT), `dop` (extra costs $), `refPct` (referral % to partner), `warn`, `status`, `deliveryMonth`, `prepaymentMonth`, `paymentMonth`, `paymentStatus`, `profitShared`, `months[]` (`{month, hours}`).
+Each project has: `id`, `site`, `client`, `type`, `income` (USDT), `dop` (extra costs $), `refPct` (referral % to partner), `warn`, `status`, `deliveryMonth`, `prepaymentMonth`, `prepaymentAmt`, `paymentMonth`, `paymentStatus`, `profitShared`, `note` (free text, edited inline in the table), `months[]` (`{month, hours, extraIncome}`).
 
 **Financial formula**
 `expense = hours × rate(€/h) × eurRate($/€)` — rate and eurRate are user-editable inputs in the sidebar, persisted to Firestore.  
@@ -41,8 +41,8 @@ Each project has: `id`, `site`, `client`, `type`, `income` (USDT), `dop` (extra 
 Accepts plain numbers or arithmetic expressions (`5000+1000`). `evalIncome()` uses `Function()` with a strict character allowlist (`[\d\s+\-*/(). ]+`) to safely evaluate expressions.
 
 **Two views**
-- **Projects** (`view-projects`): filterable card summary + table + expandable detail panel per project.
-- **Monthly** (`view-monthly`): Chart.js bar+line chart of income/expense/profit per month, plus a breakdown table. Income is attributed to `paymentMonth` (falls back to `deliveryMonth` if unset). Projects missing both fields are surfaced as a warning with quick-edit buttons.
+- **Projects** (`view-projects`): filterable card summary + table (`#proj-table`, sticky header on desktop) with an inline notes column. The detail panel `#det` lives in `#det-home` and is moved into a `tr.det-row` right under the selected row on each `renderTable()` — it must be moved out before `tbody.innerHTML` is rebuilt.
+- **Monthly** (`view-monthly`): Chart.js bar+line chart of income/expense/profit per month, plus a breakdown table. Income split is in `incomeSplit(p)`: prepayment → `prepaymentMonth` (falls back to the income month), remainder → `paymentMonth` (falls back to `deliveryMonth`). Only money that lands in no month at all is surfaced as a warning with quick-edit buttons.
 
 **CSS conventions**
 - CSS custom properties defined in `:root` in `style.css`.
@@ -51,3 +51,7 @@ Accepts plain numbers or arithmetic expressions (`5000+1000`). `evalIncome()` us
 
 **Month management**
 `MONTHS` is the canonical ordered list. `addMonth()` / `addPrevMonth()` append/prepend and call `normMonths()` on all projects to keep the arrays in sync. Modal month inputs are keyed by index (`mh0`, `mh1`, …) but saved by month name to survive index shifts from prepending.
+
+## MCP server (`mcp/`)
+
+Exposes the dashboard to Claude as MCP tools. Shared logic in `mcp/src/tools.js`; Firestore access via REST in `mcp/src/store.js` (whole-doc PATCH with `currentDocument.updateTime` precondition + retry, plus a guard that refuses writes losing months or >1 project). Two entry points: `mcp/server.js` (stdio, Claude Code/Desktop, registered via root `.mcp.json`) and `mcp/worker.js` (Cloudflare Worker, Streamable HTTP, secret in URL path `/mcp/<MCP_SECRET>`, used as a claude.ai custom connector). `tools.js` mirrors calc logic from `app.js` (`calc`, `computeMonthly`, `normMonths`, `shiftMonth`, `evalIncome` — the latter is a hand-written parser since Workers forbid `Function()`); keep them in sync. Never test writes against production — mock `fetch` instead. See `mcp/README.md`.

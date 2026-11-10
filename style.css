@@ -164,6 +164,31 @@ tbody tr.sel td{background:#E0F9F8}
 .hint{font-size:11px;color:var(--text3);text-align:center;padding:8px;font-weight:700}
 .empty-row td{text-align:center!important;padding:40px!important;color:var(--text3);font-weight:700}
 .deliv-tag{font-size:10px;color:var(--text3);font-weight:700;margin-left:4px}
+.prep-badge{font-size:10px;font-weight:800;padding:1px 7px;border-radius:20px;background:#FEF3C7;color:#92400E;white-space:nowrap}
+
+/* ─── PROJECTS TABLE: липкая шапка ───
+   sticky не работает внутри контейнеров с overflow, поэтому на десктопе
+   снимаем overflow у панели и обёртки таблицы (горизонтальный скролл там не нужен). */
+.proj-panel{overflow:visible}
+.proj-panel .ph{border-radius:var(--rl) var(--rl) 0 0}
+.proj-panel>.tw{overflow:visible}
+#proj-table>thead th{position:sticky;top:0;z-index:5;box-shadow:inset 0 -1.5px 0 var(--border);border-bottom:none}
+
+/* Заметки прямо в строке */
+.note-th{width:32%}
+#proj-table>tbody>tr>td.note-td{padding:8px 10px;cursor:default}
+.pnote{display:block;width:100%;min-width:140px;min-height:34px;max-height:140px;resize:none;border:1.5px dashed transparent;border-radius:8px;background:transparent;padding:6px 9px;font-family:'Nunito',sans-serif;font-size:12px;font-weight:600;line-height:1.4;color:var(--text2);transition:border-color .12s,background .12s;overflow-y:auto}
+.prow:hover .pnote{border-color:var(--border2)}
+.pnote:hover{background:var(--white)}
+.pnote:focus{outline:none;border-style:solid;border-color:var(--teal);background:var(--white);color:var(--text)}
+.pnote::placeholder{color:var(--text3);opacity:0;transition:opacity .12s}
+.prow:hover .pnote::placeholder,.pnote:focus::placeholder{opacity:1}
+
+/* Панель деталей, раскрытая под строкой */
+#proj-table>tbody>tr.det-row>td{padding:4px 12px 14px;background:#E0F9F8!important;cursor:default;border-bottom:1px solid var(--border)}
+#proj-table>tbody>tr.det-row:hover>td{background:#E0F9F8!important}
+.det-row .det{margin-bottom:0;box-shadow:var(--shadow)}
+.det-row .det tbody tr{cursor:default}
 
 /* ─── DETAIL PANEL ─── */
 .det{background:var(--white);border-radius:var(--rl);border:2px solid var(--teal);box-shadow:var(--shadowl);overflow:hidden;margin-bottom:16px}
@@ -343,6 +368,10 @@ select.fi{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.o
 }
 @media(max-width:768px){
   :root{--sb-w:0px}
+  .proj-panel{overflow:hidden}
+  .proj-panel>.tw{overflow-x:auto}
+  #proj-table>thead th{position:static}
+  .note-th{width:auto}
   body{margin-left:0;padding-top:60px}
   .sb{transform:translateX(-100%);width:260px}
   .sb.drawer-open{transform:translateX(0);box-shadow:4px 0 32px rgba(0,0,0,.2)}
@@ -369,9 +398,13 @@ select.fi{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.o
 @media(max-width:480px){
   .cards{grid-template-columns:1fr}
   .mg{grid-template-columns:repeat(2,1fr)}
-  /* Главная таблица: скрываем Часов (3) и Маржу (6), Расход (4) и Профит (5) остаются */
-  .panel table th:nth-child(3),.panel table td:nth-child(3),
-  .panel table th:nth-child(6),.panel table td:nth-child(6){display:none}
+  /* Главная таблица: скрываем Заметки (2), Часов (4) и Маржу (7) */
+  #proj-table>thead>tr>th:nth-child(2),#proj-table>tbody>tr.prow>td:nth-child(2),
+  #proj-table>thead>tr>th:nth-child(4),#proj-table>tbody>tr.prow>td:nth-child(4),
+  #proj-table>thead>tr>th:nth-child(7),#proj-table>tbody>tr.prow>td:nth-child(7){display:none}
+  /* Помесячная таблица — как было раньше (старое правило .panel table задевало и её) */
+  .month-stats-table table th:nth-child(3),.month-stats-table table td:nth-child(3),
+  .month-stats-table table th:nth-child(6),.month-stats-table table td:nth-child(6){display:none}
   /* Детальная таблица: скрываем только бар Активности (4-я колонка) */
   .mtbl th:nth-child(4),.mtbl td:nth-child(4){display:none}
   .mbit{max-width:100%}

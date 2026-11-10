@@ -268,6 +268,19 @@ function n(v){return isNaN(+v)?0:+v}
 function fmt(v){return Math.round(v).toLocaleString('ru-RU')}
 function fh(v){return v%1===0?v:parseFloat((+v).toFixed(2))}
 function esc(s){return(s||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'")}
+function escH(s){return String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+
+// Куда относится предоплата и остаток в помесячной аналитике.
+// Предоплата без месяца раньше молча терялась — теперь падает в месяц оплаты/сдачи.
+function incomeSplit(p){
+  const prep=Math.max(0,n(p.prepaymentAmt));
+  const incomeMonth=p.paymentMonth||p.deliveryMonth||'';
+  const prepMonth=p.prepaymentMonth||incomeMonth;
+  const remaining=Math.max(0,n(p.income)-prep);
+  // Сумма, которую некуда отнести (нет ни одного месяца) — для предупреждения
+  const unassigned=(prepMonth?0:prep)+(incomeMonth?0:remaining);
+  return{prep,prepMonth,remaining,incomeMonth,unassigned};
+}
 
 // Кол-во месяцев между двумя строками вида "Авг 25"
 function monthDiff(from, to){
@@ -356,9 +369,17 @@ function renderCards(){
 
 function renderTable(){
   const list=filtered();
+  const tbody=document.getElementById('tbody');
+  const det=document.getElementById('det');
+  // Панель деталей живёт внутри tbody — вынимаем перед перерисовкой, иначе innerHTML её уничтожит
+  if(det.parentElement!==document.getElementById('det-home')) document.getElementById('det-home').appendChild(det);
+  // Если сейчас печатают заметку — сохраняем фокус и текст через перерисовку
+  const ae=document.activeElement;
+  const keep=ae&&ae.classList&&ae.classList.contains('pnote')
+    ?{id:ae.dataset.id,v:ae.value,s:ae.selectionStart,e:ae.selectionEnd}:null;
   document.getElementById('ptitle').textContent=`Проектов: ${list.length}`;
-  if(!list.length){document.getElementById('tbody').innerHTML=`<tr><td colspan="6" class="empty-row">Ничего не найдено</td></tr>`;return;}
-  document.getElementById('tbody').innerHTML=list.map(p=>{
+  if(!list.length){tbody.innerHTML=`<tr><td colspan="7" class="empty-row">Ничего не найдено</td></tr>`;det.style.display='none';return;}
+  tbody.innerHTML=list.map(p=>{
     const{h,c,pr,m}=calc(p);
     const mc=m>=75?'#0FC47A':m>=55?'#F59E0B':'#F05252';
     const mp=Math.max(0,Math.min(100,m));
@@ -368,27 +389,65 @@ function renderTable(){
     const pfb=profitBadge(p.profitShared);
     const deliv=p.deliveryMonth?`<span class="deliv-tag">📅 ${p.deliveryMonth}</span>`:'';
     const refb=n(p.refPct)>0?`<span class="ref-badge">🤝 ${n(p.refPct)}%</span>`:'';
-    return`<tr onclick="tog('${p.id}')" class="${aid===p.id?'sel':''}">
+    const prep=n(p.prepaymentAmt);
+    const prepb=prep>0&&p.paymentStatus!=='Yes'
+      ?`<span class="prep-badge" title="Предоплата${p.prepaymentMonth?' · '+p.prepaymentMonth:''}">💰 $${fmt(prep)}${p.income-prep>0?` · ост. $${fmt(p.income-prep)}`:''}</span>`:'';
+    const sel=aid===p.id;
+    return`<tr data-id="${p.id}" onclick="tog('${p.id}')" class="prow${sel?' sel':''}">
       <td>
         <div class="pn">${p.site}${wb}</div>
         <div class="pm">${p.client}${p.type?' · '+p.type:''}</div>
-        <div class="p-badges">${sb}${pb}${pfb}${deliv}${refb}</div>
+        <div class="p-badges">${sb}${pb}${pfb}${deliv}${refb}${prepb}</div>
       </td>
+      <td class="note-td" onclick="event.stopPropagation()"><textarea class="pnote" data-id="${p.id}" rows="2" placeholder="Заметка…" oninput="noteInput(this)" onblur="saveNote(this)">${escH(p.note)}</textarea></td>
       <td class="r">$${fmt(p.income)}</td>
       <td class="r">${fh(h)}</td>
       <td class="r">$${fmt(c)}</td>
       <td class="r ${pr>=0?'pos':'neg'}">$${fmt(pr)}</td>
       <td><div class="mbar"><div class="mbt"><div class="mbf" style="width:${mp}%;background:${mc}"></div></div><span class="mbn">${Math.round(m*10)/10}%</span></div></td>
-    </tr>`;
+    </tr>${sel?`<tr class="det-row"><td colspan="7" id="det-slot"></td></tr>`:''}`;
   }).join('');
+  const slot=document.getElementById('det-slot');
+  if(slot) slot.appendChild(det); else det.style.display='none';
+  if(keep){
+    const t=tbody.querySelector(`.pnote[data-id="${keep.id}"]`);
+    if(t){t.value=keep.v;t.focus();try{t.setSelectionRange(keep.s,keep.e);}catch(e){}}
+  }
+  tbody.querySelectorAll('.pnote').forEach(autoGrow);
 }
 
-function tog(id){if(aid===id){closeD();return;}aid=id;renderTable();renderDet();}
+// Раскрытие/закрытие проекта прямо под строкой. Строку, по которой кликнули,
+// удерживаем на том же месте экрана (иначе при закрытии панели выше всё прыгает).
+function tog(id){
+  const row=document.querySelector(`#tbody tr[data-id="${id}"]`);
+  const top0=row?row.getBoundingClientRect().top:null;
+  if(aid===id){aid=null;renderTable();}
+  else{aid=id;renderTable();renderDet();}
+  const row2=document.querySelector(`#tbody tr[data-id="${id}"]`);
+  if(row2&&top0!==null) window.scrollBy(0,row2.getBoundingClientRect().top-top0);
+}
 
 function closeD(){
   aid=null;
   document.getElementById('det').style.display='none';
   renderTable();
+}
+
+// ─── ЗАМЕТКИ В ТАБЛИЦЕ ───────────────────────────────────────
+function autoGrow(t){t.style.height='auto';t.style.height=Math.min(t.scrollHeight+2,140)+'px';}
+const _noteTimers={};
+function noteInput(t){
+  autoGrow(t);
+  clearTimeout(_noteTimers[t.dataset.id]);
+  _noteTimers[t.dataset.id]=setTimeout(()=>saveNote(t),1200);
+}
+function saveNote(t){
+  clearTimeout(_noteTimers[t.dataset.id]);
+  const p=P.find(x=>x.id===t.dataset.id);if(!p)return;
+  const v=t.value.replace(/\s+$/,'');
+  if((p.note||'')===v) return;
+  p.note=v;
+  persist();
 }
 
 function renderDet(){
@@ -458,8 +517,9 @@ function renderDet(){
   }).join('');
 
   const det=document.getElementById('det');
-  det.style.display='block';
-  setTimeout(()=>det.scrollIntoView({behavior:'smooth',block:'start'}),50);
+  const slot=document.getElementById('det-slot');
+  if(slot&&det.parentElement!==slot) slot.appendChild(det);
+  det.style.display=slot?'block':'none';
 }
 
 function setC(c){fClient=c;closeD();render();closeDrawer()}
@@ -496,6 +556,7 @@ function openAdd(){
   document.getElementById('fpaymonth').value='';
   document.getElementById('fprepaymonth').value='';
   document.getElementById('fprepayamt').value='';
+  document.getElementById('fnote').value='';
   buildM(null);
   document.getElementById('ov').classList.add('open');
   setTimeout(()=>document.getElementById('fs').focus(),150);
@@ -521,6 +582,7 @@ function openEdit(){
   document.getElementById('fpaymonth').value=p.paymentMonth||'';
   document.getElementById('fprepaymonth').value=p.prepaymentMonth||'';
   document.getElementById('fprepayamt').value=p.prepaymentAmt||'';
+  document.getElementById('fnote').value=p.note||'';
   buildM(p);
   document.getElementById('ov').classList.add('open');
 }
@@ -536,12 +598,17 @@ function save(){
   if(!site){document.getElementById('ferr').textContent='Укажи домен';return}
   if(!client){document.getElementById('ferr').textContent='Укажи клиента';return}
   if(income===null||income<0){document.getElementById('ferr').textContent='Укажи корректный доход';return}
+  const prepAmt=n(parseFloat(document.getElementById('fprepayamt').value)||0);
+  if(prepAmt>0&&!document.getElementById('fprepaymonth').value){document.getElementById('ferr').textContent='Укажи месяц предоплаты — иначе она не попадёт в помесячный доход';return}
+  if(prepAmt>income){document.getElementById('ferr').textContent='Предоплата больше общего дохода проекта';return}
   const months=MONTHS.map((m,i)=>({
     month:m,
     hours:n(parseFloat(document.getElementById('mh'+i).value)||0),
     extraIncome:n(parseFloat(document.getElementById('me'+i).value)||0)
   }));
+  const old=eid?P.find(p=>p.id===eid):null;
   const obj={
+    ...(old||{}), // не теряем поля, которых нет в форме
     id:eid||uid(),site,client,
     type:document.getElementById('ft').value.trim(),
     income,
@@ -551,7 +618,8 @@ function save(){
     status:document.getElementById('fstatus').value,
     deliveryMonth:document.getElementById('fdelivery').value,
     prepaymentMonth:document.getElementById('fprepaymonth').value,
-    prepaymentAmt:n(parseFloat(document.getElementById('fprepayamt').value)||0),
+    prepaymentAmt:prepAmt,
+    note:document.getElementById('fnote').value.replace(/\s+$/,''),
     paymentMonth:document.getElementById('fpaymonth').value,
     paymentStatus:document.getElementById('fpayment').value,
     profitShared:document.getElementById('fprofitshared').value,
@@ -650,12 +718,11 @@ function computeMonthly() {
         if (stats[target] && !stats[target].allSites.includes(p.site)) stats[target].allSites.push(p.site);
       }
     });
-    const prepAmtAll = n(p.prepaymentAmt);
-    if (p.prepaymentMonth && stats[p.prepaymentMonth] && prepAmtAll > 0)
-      if (!stats[p.prepaymentMonth].allSites.includes(p.site)) stats[p.prepaymentMonth].allSites.push(p.site);
-    const incomeMonthAll = p.paymentMonth || p.deliveryMonth;
-    if (incomeMonthAll && stats[incomeMonthAll] && p.income - prepAmtAll > 0)
-      if (!stats[incomeMonthAll].allSites.includes(p.site)) stats[incomeMonthAll].allSites.push(p.site);
+    const sp = incomeSplit(p);
+    if (sp.prepMonth && stats[sp.prepMonth] && sp.prep > 0)
+      if (!stats[sp.prepMonth].allSites.includes(p.site)) stats[sp.prepMonth].allSites.push(p.site);
+    if (sp.incomeMonth && stats[sp.incomeMonth] && sp.remaining > 0)
+      if (!stats[sp.incomeMonth].allSites.includes(p.site)) stats[sp.incomeMonth].allSites.push(p.site);
 
     if (excluded) return;
 
@@ -672,19 +739,16 @@ function computeMonthly() {
       }
     });
 
-    // Предоплата → prepaymentMonth
-    const prepAmt = n(p.prepaymentAmt);
-    if (p.prepaymentMonth && stats[p.prepaymentMonth] && prepAmt > 0) {
-      stats[p.prepaymentMonth].income += prepAmt;
-      if (!stats[p.prepaymentMonth].projects.includes(p.site)) stats[p.prepaymentMonth].projects.push(p.site);
+    // Предоплата → месяц предоплаты (если не указан — месяц оплаты/сдачи)
+    if (sp.prepMonth && stats[sp.prepMonth] && sp.prep > 0) {
+      stats[sp.prepMonth].income += sp.prep;
+      if (!stats[sp.prepMonth].projects.includes(p.site)) stats[sp.prepMonth].projects.push(p.site);
     }
 
     // Остаток оплаты → paymentMonth (или fallback deliveryMonth)
-    const remaining = p.income - prepAmt;
-    const incomeMonth = p.paymentMonth || p.deliveryMonth;
-    if (incomeMonth && stats[incomeMonth] && remaining > 0) {
-      stats[incomeMonth].income += remaining;
-      if (!stats[incomeMonth].projects.includes(p.site)) stats[incomeMonth].projects.push(p.site);
+    if (sp.incomeMonth && stats[sp.incomeMonth] && sp.remaining > 0) {
+      stats[sp.incomeMonth].income += sp.remaining;
+      if (!stats[sp.incomeMonth].projects.includes(p.site)) stats[sp.incomeMonth].projects.push(p.site);
     }
   });
   return stats;
@@ -719,7 +783,8 @@ function renderMonthly() {
     'Доход — предоплата → месяц предоплаты, остаток → месяц оплаты, доплаты → по месяцам · Расход — часы × ставка€ × курс$/€' + delaySub;
 
   // Count projects without paymentMonth (not tracked in chart)
-  const noDeliv = P.filter(p => !p.paymentMonth && !p.deliveryMonth);
+  // Предупреждаем только если реально есть деньги, не попавшие ни в один месяц
+  const noDeliv = P.filter(p => incomeSplit(p).unassigned > 0);
 
   // Update chart
   const ctx = document.getElementById('monthly-chart').getContext('2d');
@@ -836,9 +901,9 @@ function renderMonthly() {
   if (noDeliv.length > 0) {
     noteEl.style.display = 'block';
     const links = noDeliv.map(p =>
-      `<button onclick="quickEditPayment('${p.id}')" style="background:var(--white);border:1.5px solid var(--border2);border-radius:8px;padding:3px 10px;font-size:11px;font-weight:700;color:var(--teal2);cursor:pointer;font-family:Nunito,sans-serif;transition:all .15s" onmouseover="this.style.background='var(--green-bg)'" onmouseout="this.style.background='var(--white)'">${p.site} ✏️</button>`
+      `<button onclick="quickEditPayment('${p.id}')" style="background:var(--white);border:1.5px solid var(--border2);border-radius:8px;padding:3px 10px;font-size:11px;font-weight:700;color:var(--teal2);cursor:pointer;font-family:Nunito,sans-serif;transition:all .15s" onmouseover="this.style.background='var(--green-bg)'" onmouseout="this.style.background='var(--white)'">${p.site} · $${fmt(incomeSplit(p).unassigned)} ✏️</button>`
     ).join(' ');
-    noteEl.innerHTML = `⚠ Не указан месяц оплаты — доход не учтён в графике:<br><div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">${links}</div>`;
+    noteEl.innerHTML = `⚠ Не указан месяц оплаты — эти суммы не попали в график:<br><div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">${links}</div>`;
   } else {
     noteEl.style.display = 'none';
   }

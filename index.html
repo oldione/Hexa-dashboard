@@ -115,12 +115,13 @@
 
   <div class="cards" id="cards"></div>
 
-  <div class="panel">
+  <div class="panel proj-panel">
     <div class="ph"><span class="ph-title" id="ptitle">Проекты</span></div>
     <div class="tw">
-      <table>
+      <table id="proj-table">
         <thead><tr>
           <th style="min-width:160px">Проект</th>
+          <th class="note-th">Заметки</th>
           <th class="r">Доход</th>
           <th class="r">Часов</th>
           <th class="r">Расход</th>
@@ -133,7 +134,8 @@
     <p class="hint">Нажми на строку — месяца, статусы, оплата</p>
   </div>
 
-  <!-- Detail panel -->
+  <!-- Detail panel: хранится здесь, при выборе проекта переносится в строку таблицы под ним -->
+  <div id="det-home">
   <div class="det" id="det" style="display:none">
     <div class="dh">
       <div class="dh-info">
@@ -162,6 +164,7 @@
       </table>
     </div>
   </div>
+  </div><!-- /det-home -->
 
 </div><!-- /view-projects -->
 
@@ -244,6 +247,12 @@
 
       <div class="fr">
         <div class="fg" style="justify-content:flex-end"><div class="wr"><input type="checkbox" id="fw"><label for="fw">⚠ Пометить как неполные данные</label></div></div>
+      </div>
+      <div class="fr" style="grid-template-columns:1fr">
+        <div class="fg">
+          <label>📝 Заметки</label>
+          <textarea class="fi" id="fnote" rows="2" placeholder="Что важно помнить по проекту…" style="resize:vertical;font-family:inherit"></textarea>
+        </div>
       </div>
 
       <!-- Status section -->
