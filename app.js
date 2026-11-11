@@ -683,7 +683,7 @@ function donutHTML(projects,withSums,opt){
   for(const p of projects){const v=stats(p,opt).received;by[p.clientId]=(by[p.clientId]||0)+v;total+=v;}
   if(total<=0) return '<p class="info">Поступлений нет</p>';
   const sorted=Object.entries(by).filter(([,v])=>v>0).sort((a,b)=>b[1]-a[1]);
-  const topN=withSums?5:3;
+  const topN=5; // одинаково на главной и во вкладке «Заказчики», чтобы доли и цвета совпадали
   const parts=sorted.slice(0,topN).map(([id,v])=>[C.refName(D.clients,id)||'—',v]);
   const rest=sorted.slice(topN).reduce((s,[,v])=>s+v,0);
   if(rest>0) parts.push(['Остальные',rest]);
