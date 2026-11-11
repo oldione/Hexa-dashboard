@@ -336,24 +336,28 @@ function panelHTML(p,s){
     p.profitShared?`<span class="tag ${p.profitShared==='Да'?'tag-ok':''}">профит поделен: ${p.profitShared.toLowerCase()}</span>`:'',
     p.warn?'<span class="tag tag-warn">⚠ неполные данные</span>':'',
   ].join('');
+  // Строка чека: сверху дата/месяц и сумма, ниже описание на всю ширину, внизу детали и кнопки
   const hRows=entries.map(h=>{
     const manual=h.phaseManual&&h.phase!==C.autoPhase(p,h.month);
     const note=h.note?escH(h.note):(h.migrated?'<span class="muted">из старых данных</span>':'<span class="warn-txt">нет описания</span>');
-    return `<div class="xi"><span class="l"><b>${h.month}</b> ${h.kind==='cost'?'<span class="ph k-cost" title="ставка себестоимости">себест.</span> ':''}<span class="ph ph-${h.phase}" title="${h.phaseManual?'фаза проставлена вручную':'фаза автоматически'}">${h.phase==='support'?'поддержка':'разработка'}${manual?' ✋':''}</span><br>${note}</span>
-      <span class="v">${hrs(h.hours)} ч × €${num(h.rate)}<small>${usd2(r2(C.entryCostUSD(D,h)))}</small></span>
+    return `<div class="xi"><span class="l"><b>${h.month}</b></span><span class="v">${hrs(h.hours)} ч × €${num(h.rate)}</span>
+      <span class="desc">${note}</span>
+      <span class="meta">${h.kind==='cost'?'<span class="ph k-cost" title="ставка себестоимости">себест.</span>':''}<span class="ph ph-${h.phase}" title="${h.phaseManual?'фаза проставлена вручную':'фаза автоматически'}">${h.phase==='support'?'поддержка':'разработка'}${manual?' ✋':''}</span><span class="sum">${usd2(r2(C.entryCostUSD(D,h)))}</span></span>
       <span class="acts"><button class="ib" title="Изменить" onclick="openHours('${p.id}','${h.id}')">✎</button><button class="ib ib-del" title="Удалить" onclick="delEntry('${h.id}')">✕</button></span></div>`;
   }).join('');
   const iRows=invs.map(i=>{
     const amtUSD=C.invoiceUSD(D,i), paid=invoicePaid(i), left=i.status==='sent'?Math.max(0,amtUSD-paid):0;
     const age=i.status==='sent'?C.daysBetween(i.issuedAt):null;
-    return `<div class="xi xi-inv"><span class="l"><b>${dmy(i.issuedAt)}</b>${age!==null?` · <span class="${age>C.OVERDUE_DAYS?'warn-txt':''}">${age} дн.</span>`:''}<br>${escH(i.description)||dash}</span>
-      <span class="v">${i.currency==='EUR'?'€'+num(i.amount):usd2(i.amount)}<small>${i.currency==='EUR'?'≈ '+usd(amtUSD)+' · ':''}${left>0?'остаток '+usd2(r2(left)):paid?'оплачено '+usd2(r2(paid)):''}</small></span>
+    return `<div class="xi"><span class="l"><b>${dmy(i.issuedAt)}</b>${age!==null?` · <span class="${age>C.OVERDUE_DAYS?'warn-txt':''}">${age} дн.</span>`:''}</span><span class="v">${i.currency==='EUR'?'€'+num(i.amount):usd2(i.amount)}</span>
+      <span class="desc">${escH(i.description)||dash}</span>
+      <span class="meta">${i.currency==='EUR'?`<span>≈ ${usd(amtUSD)}</span>`:''}${left>0?`<span class="debt">остаток ${usd2(r2(left))}</span>`:paid?`<span>оплачено ${usd2(r2(paid))}</span>`:''}</span>
       <span class="acts"><select class="inv-st inv-${i.status}" aria-label="Статус счёта" onchange="setInvoiceStatus('${i.id}',this.value)">${C.INVOICE_STATUSES.map(st=>`<option value="${st}"${st===i.status?' selected':''}>${INV_ST[st]}</option>`).join('')}</select><button class="ib ib-del" title="Удалить счёт" onclick="delInvoice('${i.id}')">✕</button></span></div>`;
   }).join('');
   const yRows=pays.map(x=>{
     const inv=invs.find(i=>i.id===x.invoiceId);
-    return `<div class="xi"><span class="l"><b>${x.month||'<span class="warn-txt">нет месяца</span>'}</b>${x.receivedAt?' · '+dmy(x.receivedAt):''}<br>${escH(x.note)}${inv?`${x.note?' · ':''}по счёту ${dmy(inv.issuedAt)}`:' <span class="warn-txt">без счёта</span>'}</span>
-      <span class="v">${usd2(x.amount)}</span>
+    return `<div class="xi"><span class="l"><b>${x.month||'<span class="warn-txt">нет месяца</span>'}</b>${x.receivedAt?' · '+dmy(x.receivedAt):''}</span><span class="v">${usd2(x.amount)}</span>
+      ${x.note?`<span class="desc">${escH(x.note)}</span>`:''}
+      <span class="meta">${inv?`<span>по счёту ${dmy(inv.issuedAt)}</span>`:'<span class="warn-txt">без счёта</span>'}</span>
       <span class="acts"><button class="ib ib-del" title="Удалить поступление" onclick="delPayment('${x.id}')">✕</button></span></div>`;
   }).join('');
   return `<div class="xpanel" onclick="event.stopPropagation()">
@@ -365,9 +369,12 @@ function panelHTML(p,s){
     </div>
     <div class="xtags">${tags}</div>
     <div class="xcols">
-      <div class="xcol"><h3>Часы <small>${entries.length} зап.</small></h3>${hRows||'<span class="xempty">Часов пока нет</span>'}</div>
-      <div class="xcol"><h3>Счета <small>${invs.length}</small></h3>${iRows||'<span class="xempty">Счетов нет</span>'}</div>
-      <div class="xcol"><h3>Поступления <small>${pays.length}</small></h3>${yRows||'<span class="xempty">Поступлений нет</span>'}</div>
+      ${receipt('Часы',`${entries.length} зап.`,hRows||'<span class="xempty">Часов пока нет</span>',
+        [['Итого',`${hrs(s.hours)} ч`],['Расход',`${usd2(s.expense)}`]])}
+      ${receipt('Счета',`${invs.length} шт.`,iRows||'<span class="xempty">Счетов нет</span>',
+        [['Выставлено',usd2(s.invoiced)],['Долг',s.debt>0?`<span class="debt">${usd2(s.debt)}</span>`:dash]])}
+      ${receipt('Поступления',`${pays.length} шт.`,yRows||'<span class="xempty">Поступлений нет</span>',
+        [['Получено',usd2(s.received)]])}
     </div>
     <div class="xactions">
       <button class="btn btn-ink" onclick="openHours('${p.id}')">Внести часы</button>
@@ -379,6 +386,12 @@ function panelHTML(p,s){
   </div>`;
 }
 
+// Колонка раскрытого проекта в виде чека: шапка, строки через пунктир, итог внизу
+function receipt(title,count,body,totals){
+  return `<div class="xcol receipt"><div class="rc-h"><h3>${title}</h3><span class="rc-cnt">${count}</span></div>
+    <div class="rc-body">${body}</div>
+    <div class="rc-total">${totals.map(([l,v])=>`<div><span>${l}</span><b>${v}</b></div>`).join('')}</div></div>`;
+}
 // Раскрытие на месте: строка, по которой кликнули, остаётся на том же месте экрана
 function tog(id,ev){
   if(ev){ev.stopPropagation();if(ev.target.closest&&ev.target.closest('.xpanel,.r-note'))return;}
