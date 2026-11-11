@@ -719,16 +719,62 @@ function donutHTML(projects,withSums,opt){
 }
 
 // ─── ПО МЕСЯЦАМ ───────────────────────────────────────────────
+// Период вкладки «По месяцам»: '' — без ограничения. Годы берутся из месяцев на шкале.
+let mFrom='', mTo='';
+const yearOf=m=>{const p=C.parseMonth(m);return p?p.y:null;};
+function yearsOnScale(){return [...new Set(D.months.map(m=>yearOf(m.month)).filter(Boolean))];}
+function yearBounds(y){const ms=D.months.map(m=>m.month).filter(m=>yearOf(m)===y);return [ms[0],ms[ms.length-1]];}
+function setMonthlyPeriod(from,to){
+  if(from&&to&&C.cmpMonth(from,to)>0) [from,to]=[to,from];
+  mFrom=from||'';mTo=to||'';renderMonthly();
+}
+function setYear(y){if(!y){setMonthlyPeriod('','');return;}const [a,b]=yearBounds(y);setMonthlyPeriod(a,b);}
+function sumRows(rows){
+  const t={inv:0,rec:0,exp:0,h:0,bE:0,sE:0,bH:0,sH:0};
+  for(const r of rows){t.inv+=r.invoiced;t.rec+=r.received;t.exp+=r.expense;t.h+=r.hours;t.bE+=r.build.expense;t.sE+=r.support.expense;t.bH+=r.build.hours;t.sH+=r.support.hours;}
+  t.prof=t.rec-t.exp;return t;
+}
+
 function renderMonthly(){
   $('mf-reset').hidden=!excludedProjects.size;
-  const rows=C.monthlyStats(D,{exclude:excludedProjects});
+  if(mFrom&&!D.months.some(m=>m.month===mFrom)) mFrom='';
+  if(mTo&&!D.months.some(m=>m.month===mTo)) mTo='';
+  const all=C.monthlyStats(D,{exclude:excludedProjects});
+  const rows=all.filter(r=>C.inPeriod(r.month,mFrom||undefined,mTo||undefined));
+  const years=yearsOnScale();
+
+  // ── итоги по годам (по всей шкале; исключённые проекты не считаются) ──
+  const yRows=years.map(y=>({y,...sumRows(all.filter(r=>yearOf(r.month)===y))}));
+  const activeYear=years.find(y=>{const [a,b]=yearBounds(y);return mFrom===a&&mTo===b;});
+  const T=sumRows(all);
+  const yRow=(r,total)=>`<tr class="${total?'total':'click-row'}${!total&&activeYear===r.y?' on':''}" ${total?'':`onclick="setYear(${r.y})"`}>
+    <td style="font-weight:800">${total?'Всё время':r.y}</td>
+    <td>${r.inv?usd(r.inv):dash}</td>
+    <td style="font-weight:700">${r.rec?usd(r.rec):dash}</td>
+    <td>${r.exp?usd(r.exp):dash}${r.exp?`<small>разр. ${usd(r.bE)} · подд. ${usd(r.sE)}</small>`:''}</td>
+    <td style="font-weight:800" class="${r.rec||r.exp?(r.prof>=0?'pos':'neg'):''}">${r.rec||r.exp?usd(r.prof):dash}</td>
+    <td>${r.rec>0?pct(r.prof,r.rec):dash}</td>
+    <td>${r.h?hrs(r2(r.h)):dash}${r.h?`<small>разр. ${hrs(r2(r.bH))} · подд. ${hrs(r2(r.sH))}</small>`:''}</td></tr>`;
+  $('years-table').innerHTML=`<thead><tr><th>Год</th><th>Выставлено</th><th>Получено</th><th>Расход</th><th>Профит</th><th>Маржа</th><th>Часы</th></tr></thead><tbody>${yRows.map(r=>yRow(r)).join('')}${yRows.length>1?yRow(T,true):''}</tbody>`;
+
+  // ── фильтр периода ──
+  $('year-pills').innerHTML=[`<button class="chip${!mFrom&&!mTo?' on':''}" onclick="setYear(0)">Все</button>`,...years.map(y=>`<button class="chip${activeYear===y?' on':''}" onclick="setYear(${y})">${y}</button>`)].join('');
+  $('m-from').innerHTML=monthOptions(mFrom,'с начала');$('m-to').innerHTML=monthOptions(mTo,'по конец');
+
+  // ── карточки за выбранный период ──
+  const P=sumRows(rows);
+  const label=activeYear?`за ${activeYear} год`:(mFrom||mTo?`${mFrom||'…'} — ${mTo||'…'}`:'за всё время');
+  $('period-kpis').innerHTML=`
+    <div class="kpi kpi-accent"><span class="k-l">Получено ${label}</span><span class="k-v">${usd(P.rec)}</span><span class="k-s">выставлено ${usd(P.inv)}</span></div>
+    <div class="kpi kpi-ink"><span class="k-l">Профит · маржа ${pct(P.prof,P.rec)}</span><span class="k-v">${usd(P.prof)}</span><span class="k-s">получено минус расход</span></div>
+    <div class="kpi kpi-white"><span class="k-l">Расход</span><span class="k-v">${usd(P.exp)}</span><span class="k-s">разраб. ${usd(P.bE)} · поддержка ${usd(P.sE)}</span></div>
+    <div class="kpi kpi-white"><span class="k-l">Часы</span><span class="k-v">${hrs(r2(P.h))}</span><span class="k-s">разраб. ${hrs(r2(P.bH))} · поддержка ${hrs(r2(P.sH))}</span></div>`;
+
   $('legend-m').innerHTML=legendHTML();
   $('chart-monthly').innerHTML=chartHTML(rows);scrollChartsToEnd();
   const delay=parseInt(D.settings.expDelay,10)||0;
   $('monthly-info').textContent='Получено — по месяцу поступления · Выставлено — по дате счёта · Расход — часы × ставка записи × курс месяца'+(delay?` (сдвинут на +${delay} мес.)`:'')+' · Профит — получено минус расход. Курс можно поправить прямо в таблице; пустое поле — общий курс. Нажми на проект в строке, чтобы исключить его из расчёта.';
-  const T={inv:0,rec:0,exp:0};
   $('monthly-table').innerHTML=`<thead><tr><th>Месяц</th><th>Курс $/€</th><th>Выставлено</th><th>Получено</th><th>Расход</th><th>Профит</th><th>Маржа</th><th class="l" style="min-width:260px">Проекты</th></tr></thead><tbody>`+rows.map(r=>{
-    T.inv+=r.invoiced;T.rec+=r.received;T.exp+=r.expense;
     const any=r.received||r.expense;
     const tags=r.allProjects.map(id=>{const p=proj(id);if(!p)return '';const off=excludedProjects.has(id);return `<button class="ptag${off?' off':''}" aria-pressed="${off}" onclick="toggleMonthlyProject('${id}')" title="${off?'Включить':'Исключить'}: ${escH(p.site)}">${escH(p.site)}</button>`;}).join('');
     return `<tr>
@@ -741,7 +787,7 @@ function renderMonthly(){
       <td>${r.received>0?pct(r.profit,r.received):dash}</td>
       <td class="l">${tags}</td>
     </tr>`;
-  }).join('')+`<tr class="total"><td>Итого</td><td></td><td>${usd(T.inv)}</td><td>${usd(T.rec)}</td><td>${usd(T.exp)}</td><td class="${T.rec-T.exp>=0?'pos':'neg'}">${usd(T.rec-T.exp)}</td><td>${pct(T.rec-T.exp,T.rec)}</td><td></td></tr></tbody>`;
+  }).join('')+(rows.length?`<tr class="total"><td>Итого</td><td></td><td>${usd(P.inv)}</td><td>${usd(P.rec)}</td><td>${usd(P.exp)}</td><td class="${P.prof>=0?'pos':'neg'}">${usd(P.prof)}</td><td>${pct(P.prof,P.rec)}</td><td></td></tr>`:'<tr><td colspan="8" class="l muted" style="text-align:center;padding:18px">Нет месяцев в выбранном периоде</td></tr>')+'</tbody>';
 }
 function toggleMonthlyProject(id){excludedProjects.has(id)?excludedProjects.delete(id):excludedProjects.add(id);renderMonthly();}
 function resetMonthlyFilter(){excludedProjects.clear();renderMonthly();}

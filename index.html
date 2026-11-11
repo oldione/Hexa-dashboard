@@ -117,6 +117,18 @@
     <!-- ═══ ПО МЕСЯЦАМ ═══ -->
     <section class="view" id="view-monthly">
       <section class="card">
+        <div class="card-h"><h2>Итоги по годам</h2><span class="card-sub">профит — получено минус расход, без допрасходов и реферала · нажми на год, чтобы показать только его</span></div>
+        <div class="tw"><table class="tbl" id="years-table"></table></div>
+      </section>
+      <div class="filters">
+        <span class="muted" style="font-size:14px;font-weight:700">Период</span>
+        <div class="pills" id="year-pills"></div>
+        <span class="sel sel-fixed"><select id="m-from" aria-label="Период с" onchange="setMonthlyPeriod(this.value,$('m-to').value)"></select></span>
+        <span class="muted">—</span>
+        <span class="sel sel-fixed"><select id="m-to" aria-label="Период по" onchange="setMonthlyPeriod($('m-from').value,this.value)"></select></span>
+      </div>
+      <div class="kpis" id="period-kpis"></div>
+      <section class="card">
         <div class="card-h"><h2>Динамика по месяцам</h2><div class="legend" id="legend-m"></div></div>
         <div id="chart-monthly"></div>
       </section>

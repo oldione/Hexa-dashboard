@@ -408,3 +408,10 @@ h1,h2,h3{margin:0}
 .rc-body .xi .meta{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;font-size:12px;font-weight:700;color:var(--muted);min-width:0;align-self:center}
 .rc-body .xi .meta .sum{color:var(--ink)}
 .rc-body .xi .acts{grid-column:2;align-self:center}
+
+/* период и итоги по годам */
+.pills{display:flex;flex-wrap:wrap;gap:6px}
+.pills .chip{height:40px;padding:0 16px}
+#years-table tr.click-row:hover td{background:var(--soft)}
+#years-table tr.on td{background:#FFF6D6}
+#years-table tr.on td:first-child{box-shadow:inset 4px 0 0 var(--accent);padding-left:10px}
