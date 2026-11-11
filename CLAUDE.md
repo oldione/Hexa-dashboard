@@ -42,9 +42,11 @@ Single-page dashboard for freelance web-dev projects. No framework, no bundler.
 - `C.syncInvoiceStatus` flips sent→paid when payments cover an invoice (and back if a payment is removed)
 - `C.clientSummary` groups `inherited` projects separately; `C.receivables`, `C.dataIssues` power the reports. `support_not_invoiced` is per project: support hours after the month of the project's last active invoice, skipped for `supportIncluded`
 
-**UI views** (tabs): Projects (filters, cards, table with sticky header and inline notes; the detail panel `#det` lives in `#det-home` and is moved into a `tr.det-row` under the selected row on each `renderTable()` — it must be moved out before `tbody.innerHTML` is rebuilt; it holds editors for hour entries, invoices, payments), Monthly (chart + table with editable per-month rate, add month buttons), Clients (period filter), Receivables, Issues.
-
-**CSS conventions**: custom properties in `:root`; status badge classes use Cyrillic slugs (`.s-сдан` …); breakpoints 900px, 768px (sidebar → drawer, sticky header off, tables scroll horizontally), 480px (some columns hidden — selectors target `#proj-table` children by index; update them if columns change).
+**UI** (design "hexabyte": navy sidebar with tab navigation + editable rates, yellow accent `--accent`, rounded cards; tokens in `:root` of `style.css`). Everything is rendered from `D` via `HexaCore` — no hardcoded months, rates, clients or amounts.
+- Projects: KPI cards, SVG chart (`chartHTML`, scale computed from data) + client donut (`donutHTML`), filter selects with counts (`renderFilters`), list view (default; `.prow`, CSS grid ≥1300px, flex-wrap below) or grid view; first `PAGE` rows + "Показать все". Inline note textarea per row (autosave, focus kept across re-renders). Clicking a row expands `panelHTML` in place (KPIs, hour entries with edit/delete, invoices with status select/delete, payments with delete, actions); `tog()` keeps the clicked row at the same screen position.
+- Forms are modals built by JS (`openProjectForm`, `openHours` — also from the sidebar with a project picker, `openInvoice`, `openPayment`, `confirmBox`); state of the open modal is in `M`.
+- Monthly (chart + table with editable per-month rate, exclude-project tags, add month), Clients (period filter, donut, own/inherited tables), Receivables, Issues (grouped `C.dataIssues`, titles in `ISSUE_TITLES`).
+- Breakpoints: 1300px (row grid), 900px (sidebar → drawer, mobile header), 520px.
 
 ## MCP server (`mcp/`)
 

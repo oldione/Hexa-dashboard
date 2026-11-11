@@ -3,337 +3,161 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>WebDev — дашборд</title>
-<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 36 36'%3E%3Crect width='36' height='36' rx='8' fill='%23FFB800'/%3E%3Ctext x='18' y='26' text-anchor='middle' font-family='Arial,sans-serif' font-weight='700' font-size='22' fill='white'%3EW%3C/text%3E%3C/svg%3E">
-<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+<title>hexabyte — дашборд</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 36 36'%3E%3Crect width='36' height='36' rx='9' fill='%2316202D'/%3E%3Cpath d='M18 7l8 4.6v9.2L18 25.4 10 20.8v-9.2z' fill='%23FBCB08'/%3E%3C/svg%3E">
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800&family=Poppins:wght@700&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
+<template id="logo-tpl"><svg role="img" aria-label="Логотип hexabyte" width="40" height="47" viewBox="0 0 50 59" fill="none"><path d="M10.0535 26.1992L20.1071 31.9876V43.5644L10.0535 49.3528L0 43.5644V31.9876L10.0535 26.1992Z" fill="#D15C46"/><path d="M0 31.9876L10.0535 26.1992L20.1071 31.9876L10.0535 37.776L0 31.9876Z" fill="#14C8F3"/><path d="M10.0536 49.4015L10.0675 37.8007L20.1071 31.9883L20.0933 43.5891L10.0536 49.4015Z" fill="#0661D0"/><path d="M10.0536 49.4015L10.0397 37.8007L6.10352e-05 31.9883L0.0139275 43.5891L10.0536 49.4015Z" fill="#9F5CF7"/><path d="M39.3001 26.1992L49.3536 31.9876V43.5644L39.3001 49.3528L29.2466 43.5644V31.9876L39.3001 26.1992Z" fill="#D15C46"/><path d="M29.2466 31.9876L39.3001 26.1992L49.3536 31.9876L39.3001 37.776L29.2466 31.9876Z" fill="#14C8F3"/><path d="M39.3002 49.4015L39.314 37.8007L49.3537 31.9883L49.3398 43.5891L39.3002 49.4015Z" fill="#8331EF"/><path d="M39.3002 49.4015L39.2863 37.8007L29.2466 31.9883L29.2605 43.5891L39.3002 49.4015Z" fill="#088DE0"/><path d="M24.6768 0L34.7304 5.7884V17.3652L24.6768 23.1536L14.6233 17.3652V5.7884L24.6768 0Z" fill="#D15C46"/><path d="M14.6233 5.7884L24.6768 0L34.7304 5.78839L24.6768 11.5768L14.6233 5.7884Z" fill="#BF8EFF"/><path d="M24.6769 23.1984L24.6907 11.5976L34.7304 5.78516L34.7165 17.386L24.6769 23.1984Z" fill="#0661D0"/><path d="M24.6769 23.1984L24.663 11.5976L14.6234 5.78516L14.6372 17.386L24.6769 23.1984Z" fill="#088DE0"/><path d="M24.6768 35.3398L34.7304 41.1282V52.705L24.6768 58.4934L14.6233 52.705V41.1282L24.6768 35.3398Z" fill="#25598E"/><path d="M14.6233 41.1282L24.6768 35.3398L34.7304 41.1282L24.6768 46.9166L14.6233 41.1282Z" fill="#14C8F3"/><path d="M24.6769 58.5382L24.6907 46.9374L34.7304 41.125L34.7165 52.7258L24.6769 58.5382Z" fill="#8331EF"/><path d="M24.6769 58.5382L24.663 46.9374L14.6234 41.125L14.6372 52.7258L24.6769 58.5382Z" fill="#9F5CF7"/><path d="M10.0535 9.14062L20.1071 14.929V26.5058L10.0535 32.2942L0 26.5058V14.929L10.0535 9.14062Z" fill="#25598E"/><path d="M0 14.929L10.0535 9.14062L20.1071 14.929L10.0535 20.7174L0 14.929Z" fill="#BF8EFF"/><path d="M10.0536 32.3429L10.0675 20.7421L20.1071 14.9297L20.0933 26.5305L10.0536 32.3429Z" fill="#0661D0"/><path d="M10.0536 32.3429L10.0397 20.7421L6.10352e-05 14.9297L0.0139275 26.5305L10.0536 32.3429Z" fill="#9F5CF7"/><path d="M39.3001 9.14062L49.3536 14.929V26.5058L39.3001 32.2942L29.2466 26.5058V14.929L39.3001 9.14062Z" fill="#D15C46"/><path d="M29.2466 14.929L39.3001 9.14062L49.3536 14.929L39.3001 20.7174L29.2466 14.929Z" fill="#BF8EFF"/><path d="M39.3002 32.3429L39.314 20.7421L49.3537 14.9297L49.3398 26.5305L39.3002 32.3429Z" fill="#8331EF"/><path d="M39.3002 32.3429L39.2863 20.7421L29.2466 14.9297L29.2605 26.5305L39.3002 32.3429Z" fill="#088DE0"/><path d="M24.6768 17.668L34.7304 23.4564V35.0332L24.6768 40.8216L14.6233 35.0332V23.4564L24.6768 17.668Z" fill="#25598E"/><path d="M14.6233 23.4564L24.6768 17.668L34.7304 23.4564L24.6768 29.2448L14.6233 23.4564Z" fill="#BF8EFF"/><path d="M24.6769 40.8703L24.6907 29.2694L34.7304 23.457L34.7165 35.0578L24.6769 40.8703Z" fill="#8331EF"/><path d="M24.6769 40.8703L24.663 29.2694L14.6234 23.457L14.6372 35.0578L24.6769 40.8703Z" fill="#9F5CF7"/></svg></template>
+
 <div class="auth-wall" id="auth-wall">
   <div class="auth-box">
-    <div class="auth-logo"><div class="logo-i">W</div></div>
-    <div class="auth-title">WebDev Dashboard</div>
+    <span class="logo-slot"></span>
+    <div class="auth-title">hexabyte<span>.site</span></div>
     <div class="auth-sub">Введи пароль для доступа</div>
-    <input class="auth-input" id="auth-input" type="password" placeholder="Пароль" onkeydown="if(event.key==='Enter')authSubmit()">
-    <button class="auth-btn" onclick="authSubmit()">Войти</button>
+    <input class="auth-input" id="auth-input" type="password" placeholder="Пароль" aria-label="Пароль" onkeydown="if(event.key==='Enter')authSubmit()">
+    <button class="btn btn-ink" onclick="authSubmit()">Войти</button>
     <div class="auth-err" id="auth-err"></div>
   </div>
 </div>
 
-<div class="drawer-ov" id="drawer-ov" onclick="closeDrawer()"></div>
+<div class="decor decor-1" aria-hidden="true"></div>
+<div class="decor decor-2" aria-hidden="true"></div>
 
 <header class="mob-hdr">
-  <button class="mob-hamburger" onclick="openDrawer()">
-    <svg width="18" height="14" viewBox="0 0 18 14" fill="none"><rect width="18" height="2" rx="1" fill="#5A7080"/><rect y="6" width="18" height="2" rx="1" fill="#5A7080"/><rect y="12" width="12" height="2" rx="1" fill="#5A7080"/></svg>
-  </button>
-  <span class="mob-hdr-title">WebDev</span>
-  <button class="mob-hdr-add" onclick="openAdd()">+</button>
+  <button class="mob-burger" onclick="openDrawer()" aria-label="Меню"><svg width="18" height="14" viewBox="0 0 18 14" fill="none"><rect width="18" height="2" rx="1" fill="#fff"/><rect y="6" width="18" height="2" rx="1" fill="#fff"/><rect y="12" width="12" height="2" rx="1" fill="#fff"/></svg></button>
+  <span class="mob-title" id="mob-title">Проекты</span>
+  <button class="mob-add" onclick="openAdd()" aria-label="Новый проект">+</button>
 </header>
+<div class="drawer-ov" id="drawer-ov" onclick="closeDrawer()"></div>
 
-<div class="mob-clients" id="mob-clients"></div>
-
-<nav class="sb" id="sb">
-  <div class="sb-top">
-    <div class="logo"><div class="logo-i">W</div><span class="logo-t">WebDev</span></div>
-    <button class="sb-close-btn" onclick="closeDrawer()">✕</button>
-  </div>
-  <div class="sec-lbl">Клиенты</div>
-  <div id="nav"></div>
-  <div class="sb-bot">
-    <div class="rate-w">
-      <span class="wlbl">Ставки по умолчанию</span>
-      <div class="rate-row"><input type="number" id="rate" min="1" max="999" step="0.5" style="font-size:16px"><span>€/ч разраб.</span></div>
-      <div style="height:6px"></div>
-      <div class="rate-row"><input type="number" id="costrate" min="1" max="999" step="0.5" style="font-size:16px"><span>€/ч себест.</span></div>
-      <div style="font-size:10px;color:rgba(255,255,255,.38);margin-top:5px;font-weight:700;text-align:center">для новых записей часов</div>
-      <div style="height:8px"></div>
-      <span class="wlbl">Общий курс евро</span>
-      <div class="rate-row">
-        <span style="color:rgba(255,255,255,.65);font-size:13px;font-weight:700">1€ =</span>
-        <input type="number" id="eurrate" min="0.5" max="3" step="0.001" style="font-size:16px">
-        <span>$</span>
+<div class="shell">
+  <aside class="sb" id="sb">
+    <div class="logo"><span class="logo-slot"></span><span class="logo-t">hexabyte<span>.site</span></span></div>
+    <nav class="nav" id="nav" aria-label="Разделы"></nav>
+    <div class="sb-box">
+      <span class="sb-lbl">Ставки и курс</span>
+      <label class="sb-row"><span>Разработка</span><span class="sb-in"><input type="number" id="rate" min="1" step="0.5" aria-label="Ставка разработки, €/ч">€/ч</span></label>
+      <label class="sb-row"><span>Себестоимость</span><span class="sb-in"><input type="number" id="costrate" min="1" step="0.5" aria-label="Ставка себестоимости, €/ч">€/ч</span></label>
+      <label class="sb-row"><span>1 € (общий)</span><span class="sb-in"><input type="number" id="eurrate" min="0.5" step="0.001" aria-label="Общий курс доллара за евро">$</span></label>
+      <label class="sb-row"><span>Задержка счетов</span><span class="sb-in"><input type="number" id="expdelay" min="0" max="6" step="1" aria-label="Задержка оплаты счетов, месяцев">мес.</span></label>
+      <span class="sb-hint">Ставки — для новых записей часов. Общий курс — если у месяца нет своего.</span>
+    </div>
+    <div class="sb-actions">
+      <button class="btn btn-accent" onclick="openHours()">Внести часы</button>
+      <div class="row2">
+        <button class="btn btn-ghost-w" onclick="exportData()">Экспорт</button>
+        <button class="btn btn-ghost-w" onclick="triggerImport()">Импорт</button>
       </div>
-      <div style="font-size:10px;color:rgba(255,255,255,.38);margin-top:5px;font-weight:700;text-align:center">если у месяца нет своего курса</div>
-      <div style="height:8px"></div>
-      <span class="wlbl">Задержка оплаты счетов</span>
-      <div class="rate-row">
-        <input type="number" id="expdelay" min="0" max="3" step="1" style="font-size:16px">
-        <span>мес.</span>
+      <input type="file" id="imp-input" accept=".json" hidden onchange="importData(event)">
+    </div>
+    <div class="sb-note">Firestore · синхронно с Claude</div>
+  </aside>
+
+  <main class="main">
+    <div class="topline">
+      <div>
+        <span class="eyebrow" id="eyebrow">Дашборд</span>
+        <h1 id="page-title">Проекты</h1>
       </div>
-      <div style="font-size:10px;color:rgba(255,255,255,.38);margin-top:4px;font-weight:700;text-align:center">0 = по факту · 1 = счёт след. мес.</div>
-    </div>
-    <button class="add-btn" onclick="openAdd()">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-      Новый проект
-    </button>
-    <div class="data-btns">
-      <button class="db" onclick="exportData()">⬇ Экспорт</button>
-      <button class="db" onclick="triggerImport()">⬆ Импорт</button>
-    </div>
-    <input type="file" id="imp-input" accept=".json" style="display:none" onchange="importData(event)">
-    <div class="storage-note">Данные: Firestore · синхронно с Claude</div>
-  </div>
-</nav>
-
-<div class="main">
-  <!-- View tabs -->
-  <div class="view-tabs">
-    <button class="vtab on" id="tab-projects" onclick="switchTab('projects')">📋 Проекты</button>
-    <button class="vtab" id="tab-monthly" onclick="switchTab('monthly')">📅 По месяцам</button>
-    <button class="vtab" id="tab-clients" onclick="switchTab('clients')">👥 Заказчики</button>
-    <button class="vtab" id="tab-receivables" onclick="switchTab('receivables')">💸 Дебиторка <span class="tab-cnt" id="cnt-receivables"></span></button>
-    <button class="vtab" id="tab-issues" onclick="switchTab('issues')">🔎 Проверка <span class="tab-cnt" id="cnt-issues"></span></button>
-  </div>
-
-  <!-- ═══ PROJECTS VIEW ═══ -->
-  <div class="view on" id="view-projects">
-  <div class="topbar">
-    <div class="srch">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-      <input id="search" placeholder="Поиск..." oninput="render()">
-    </div>
-    <div class="inc-f">
-      <span class="lbl">Получено от</span>
-      <input type="number" id="fmin" placeholder="0" oninput="render()">
-      <span class="sep">—</span>
-      <input type="number" id="fmax" placeholder="∞" oninput="render()">
-      <span class="lbl">$</span>
-    </div>
-  </div>
-
-  <!-- Type filter -->
-  <div class="fbar">
-    <span class="fbar-lbl">Тип:</span>
-    <div id="type-pills" style="display:flex;gap:6px;flex-wrap:wrap"></div>
-    <div class="fdiv"></div>
-    <button class="btn btn-sm" onclick="reset()">✕ Сбросить</button>
-  </div>
-
-  <!-- Status filter -->
-  <div class="fbar">
-    <span class="fbar-lbl">Статус:</span>
-    <div id="status-pills" style="display:flex;gap:6px;flex-wrap:wrap"></div>
-  </div>
-  <div class="fbar" style="margin-bottom:16px">
-    <span class="fbar-lbl">Оплата:</span>
-    <div id="pay-pills" style="display:flex;gap:6px;flex-wrap:wrap"></div>
-  </div>
-
-  <div class="cards" id="cards"></div>
-
-  <div class="panel proj-panel">
-    <div class="ph"><span class="ph-title" id="ptitle">Проекты</span></div>
-    <div class="tw">
-      <table id="proj-table">
-        <thead><tr>
-          <th style="min-width:160px">Проект</th>
-          <th class="note-th">Заметки</th>
-          <th class="r">Получено</th>
-          <th class="r">Долг</th>
-          <th class="r">Часов</th>
-          <th class="r">Расход</th>
-          <th class="r">Профит</th>
-          <th style="min-width:120px">Маржа</th>
-        </tr></thead>
-        <tbody id="tbody"></tbody>
-      </table>
-    </div>
-    <p class="hint">Нажми на строку — часы с описаниями, счета, поступления</p>
-  </div>
-
-  <!-- Detail panel: хранится здесь, при выборе проекта переносится в строку таблицы под ним -->
-  <div id="det-home">
-  <div class="det" id="det" style="display:none">
-    <div class="dh">
-      <div class="dh-info">
-        <div class="dh-site" id="ds"></div>
-        <div class="dh-sub" id="dm"></div>
-        <div class="dh-badges" id="dh-badges"></div>
-      </div>
-      <div class="dacts">
-        <button class="da da-e" onclick="openEdit()">✏ Изменить</button>
-        <button class="da da-d" onclick="askDel()">🗑 Удалить</button>
-        <button class="da da-c" onclick="closeD()">✕</button>
-      </div>
-    </div>
-    <div id="warranty-row"></div>
-    <div class="dkpi" id="dkpi"></div>
-    <div class="dsec" id="dsec-hours"></div>
-    <div class="dsec" id="dsec-invoices"></div>
-    <div class="dsec" id="dsec-payments"></div>
-  </div>
-  </div><!-- /det-home -->
-
-</div><!-- /view-projects -->
-
-<!-- ═══ MONTHLY VIEW ═══ -->
-<div class="view" id="view-monthly">
-
-  <div class="chart-panel">
-    <div class="chart-title">Деньги по месяцам</div>
-    <div class="chart-sub" id="chart-sub"></div>
-    <div class="chart-wrap"><canvas id="monthly-chart"></canvas></div>
-  </div>
-
-  <div class="month-stats-table panel">
-    <div class="ph">
-      <span class="ph-title">Детализация по месяцам</span>
-      <button class="mf-reset-btn" id="mf-reset-btn" onclick="resetMonthlyFilter()" style="display:none">Сбросить фильтр</button>
-      <button class="add-month-btn" style="background:var(--text2)" onclick="addPrevMonth()" type="button">← Прошлый месяц</button>
-      <button class="add-month-btn" onclick="addMonth()" type="button">Следующий месяц →</button>
-    </div>
-    <div class="tw">
-      <table>
-        <thead><tr>
-          <th style="min-width:80px;white-space:nowrap">Месяц</th>
-          <th class="r" title="Курс $ за € для расходов этого месяца">Курс $/€</th>
-          <th class="r">Выставлено</th>
-          <th class="r">Получено</th>
-          <th class="r">Расход</th>
-          <th class="r">Профит</th>
-          <th class="r">Маржа</th>
-          <th style="min-width:200px">Проекты <span style="font-size:10px;font-weight:600;color:var(--text3)">(клик — отключить)</span></th>
-        </tr></thead>
-        <tbody id="monthly-tbody"></tbody>
-      </table>
-    </div>
-    <div class="no-deliv-note" id="no-deliv-note" style="display:none"></div>
-  </div>
-
-</div><!-- /view-monthly -->
-
-<!-- ═══ CLIENTS VIEW ═══ -->
-<div class="view" id="view-clients">
-  <div class="fbar" style="margin-bottom:14px">
-    <span class="fbar-lbl">Период:</span>
-    <select class="fi fi-sm" id="cs-from" onchange="renderClients()"></select>
-    <span class="sep">—</span>
-    <select class="fi fi-sm" id="cs-to" onchange="renderClients()"></select>
-    <button class="btn btn-sm" onclick="document.getElementById('cs-from').value='';document.getElementById('cs-to').value='';renderClients()">Всё время</button>
-  </div>
-  <div id="clients-body"></div>
-</div>
-
-<!-- ═══ RECEIVABLES VIEW ═══ -->
-<div class="view" id="view-receivables">
-  <div id="recv-body"></div>
-</div>
-
-<!-- ═══ DATA ISSUES VIEW ═══ -->
-<div class="view" id="view-issues">
-  <div id="issues-body"></div>
-</div>
-</div><!-- /main -->
-
-<!-- Modal -->
-<div class="ov" id="ov" onclick="ovc(event)">
-  <div class="modal">
-    <div class="mh"><h2 id="mtitle">Добавить проект</h2><button class="btn btn-sm" onclick="closeM()">✕</button></div>
-    <div class="mb">
-      <!-- Basic info -->
-      <div class="fr">
-        <div class="fg"><label>Сайт / домен *</label><input class="fi" id="fs" placeholder="example.com"></div>
-        <div class="fg"><label>Заказчик *</label><input class="fi" id="fc" placeholder="Banking" list="dl-clients" autocomplete="off"></div>
-      </div>
-      <div class="fr">
-        <div class="fg"><label>Тип проекта</label><input class="fi" id="ft" placeholder="Game key, landing…" list="dl-types" autocomplete="off"></div>
-        <div class="fg">
-          <label>Происхождение</label>
-          <select class="fi" id="forigin">
-            <option value="own">Свой — строили сами</option>
-            <option value="inherited">Чужой — взяли на поддержку</option>
-            <option value="">— не указано —</option>
-          </select>
-        </div>
-      </div>
-      <datalist id="dl-clients"></datalist><datalist id="dl-types"></datalist>
-      <div class="fr">
-        <div class="fg"><label>Доп. расход / правки ($)</label><input class="fi" id="fd" type="number" min="0" placeholder="0"></div>
-        <div class="fg">
-          <label>Реферальный % партнёру</label>
-          <div class="pct-wrap">
-            <input class="fi" id="frefpct" type="number" min="0" max="100" step="0.5" placeholder="0">
-            <span class="pct-sfx">%</span>
+      <div class="top-actions">
+        <div class="proj-tools" id="proj-tools">
+          <label class="search">
+            <svg aria-hidden="true" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.6-3.6"/></svg>
+            <input type="search" id="search" placeholder="Сайт, заказчик или тип" aria-label="Поиск по проектам" oninput="onFilter()">
+          </label>
+          <div class="seg" role="group" aria-label="Вид списка">
+            <button id="v-grid" onclick="setView('grid')" aria-label="Карточками"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></button>
+            <button id="v-list" onclick="setView('list')" aria-label="Списком"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
           </div>
         </div>
-      </div>
-      <div class="fr">
-        <div class="fg" style="justify-content:flex-end"><div class="wr"><input type="checkbox" id="fw"><label for="fw">⚠ Пометить как неполные данные</label></div></div>
-      </div>
-      <div class="fr" style="grid-template-columns:1fr">
-        <div class="fg">
-          <label>📝 Заметки</label>
-          <textarea class="fi" id="fnote" rows="2" placeholder="Что важно помнить по проекту…" style="resize:vertical;font-family:inherit"></textarea>
-        </div>
-      </div>
-
-      <div class="section-divider">Статус</div>
-      <div class="fr">
-        <div class="fg">
-          <label>Статус проекта</label>
-          <select class="fi" id="fstatus">
-            <option value="">— не задан —</option>
-            <option value="Обсуждение">Обсуждение</option>
-            <option value="В работе">В работе</option>
-            <option value="На проверке">На проверке</option>
-            <option value="На обслуживании">На обслуживании</option>
-            <option value="Сдан">Сдан</option>
-            <option value="Холд">Холд</option>
-          </select>
-        </div>
-        <div class="fg">
-          <label>Месяц сдачи (граница build / support)</label>
-          <select class="fi" id="fdelivery"></select>
-        </div>
-      </div>
-      <div class="fr">
-        <div class="fg">
-          <label>Профит поделен</label>
-          <select class="fi" id="fprofitshared">
-            <option value="">— не задан —</option>
-            <option value="Да">✅ Да</option>
-            <option value="Нет">⏳ Нет</option>
-          </select>
-        </div>
-        <div class="fg" style="justify-content:flex-end"><div class="wr"><input type="checkbox" id="fsupinc"><label for="fsupinc">🛠 Поддержка входит в стоимость</label></div></div>
-      </div>
-
-      <div id="new-invoice-block">
-        <div class="section-divider">Счёт (необязательно)</div>
-        <div class="fr">
-          <div class="fg"><label>Сумма счёта</label><input class="fi" id="finvamt" type="text" placeholder="0 или 2101+2101"></div>
-          <div class="fg"><label>Валюта</label><select class="fi" id="finvcur"><option>USD</option><option>EUR</option></select></div>
-        </div>
-        <div style="font-size:11px;color:var(--text3);font-weight:600;margin:-6px 0 6px">Будет выставлен счёт со статусом «отправлен» на сегодняшнюю дату. Деньги потом — через «Поступления» в карточке проекта.</div>
+        <button class="btn btn-ink" onclick="openAdd()">Новый проект</button>
       </div>
     </div>
-    <div class="mfoot">
-      <div class="mfl" id="ferr"></div>
-      <button class="btn" onclick="closeM()">Отмена</button>
-      <button class="btn btn-teal" onclick="save()">Сохранить</button>
-    </div>
-  </div>
+    <div id="blocker-slot"></div>
+
+    <!-- ═══ ПРОЕКТЫ ═══ -->
+    <section class="view on" id="view-projects">
+      <div class="kpis" id="cards"></div>
+      <div class="row-2">
+        <section class="card chart-card">
+          <div class="card-h"><h2>Динамика по месяцам</h2><div class="legend" id="legend-p"></div></div>
+          <div id="chart-projects"></div>
+        </section>
+        <section class="card donut-card">
+          <div class="card-h"><h2>Доля заказчиков</h2><span class="card-sub">в полученных деньгах</span></div>
+          <div id="donut-projects"></div>
+        </section>
+      </div>
+      <div class="list-head">
+        <h2 id="ptitle">Все проекты</h2>
+        <button class="btn btn-outline" onclick="reset()">Сбросить фильтры</button>
+      </div>
+      <div class="filters">
+        <span class="sel"><select id="f-client" aria-label="Заказчик" onchange="onFilter()"></select></span>
+        <span class="sel"><select id="f-type" aria-label="Тип проекта" onchange="onFilter()"></select></span>
+        <span class="sel"><select id="f-status" aria-label="Статус" onchange="onFilter()"></select></span>
+        <span class="sel"><select id="f-pay" aria-label="Оплата" onchange="onFilter()"></select></span>
+        <div class="range">
+          <span>Получено от</span>
+          <input type="number" id="fmin" placeholder="0" aria-label="Получено от, долларов" oninput="onFilter()">
+          <span>—</span>
+          <input type="number" id="fmax" placeholder="∞" aria-label="Получено до, долларов" oninput="onFilter()">
+          <span>$</span>
+        </div>
+        <button class="chip" id="f-debt" onclick="toggleDebt()" aria-pressed="false">С долгом</button>
+      </div>
+      <div id="plist"></div>
+    </section>
+
+    <!-- ═══ ПО МЕСЯЦАМ ═══ -->
+    <section class="view" id="view-monthly">
+      <section class="card">
+        <div class="card-h"><h2>Динамика по месяцам</h2><div class="legend" id="legend-m"></div></div>
+        <div id="chart-monthly"></div>
+      </section>
+      <section class="card">
+        <div class="card-h">
+          <h2>Детализация по месяцам</h2>
+          <div class="mhead">
+            <button class="btn btn-outline btn-sm" id="mf-reset" onclick="resetMonthlyFilter()" hidden>Сбросить фильтр</button>
+            <button class="btn btn-soft btn-sm" onclick="addPrevMonth()">← Прошлый месяц</button>
+            <button class="btn btn-ink btn-sm" onclick="addMonth()">Следующий месяц →</button>
+          </div>
+        </div>
+        <p class="info" id="monthly-info"></p>
+        <div class="tw"><table class="tbl" id="monthly-table"></table></div>
+      </section>
+    </section>
+
+    <!-- ═══ ЗАКАЗЧИКИ ═══ -->
+    <section class="view" id="view-clients">
+      <div class="filters">
+        <span class="muted" style="font-size:14px;font-weight:700">Период</span>
+        <span class="sel sel-fixed"><select id="cs-from" aria-label="Период с" onchange="renderClients()"></select></span>
+        <span class="muted">—</span>
+        <span class="sel sel-fixed"><select id="cs-to" aria-label="Период по" onchange="renderClients()"></select></span>
+        <button class="btn btn-outline" onclick="$('cs-from').value='';$('cs-to').value='';renderClients()">Всё время</button>
+      </div>
+      <div id="clients-body" style="display:flex;flex-direction:column;gap:16px"></div>
+    </section>
+
+    <!-- ═══ ДЕБИТОРКА ═══ -->
+    <section class="view" id="view-receivables"></section>
+
+    <!-- ═══ ПРОВЕРКА ═══ -->
+    <section class="view" id="view-issues"></section>
+  </main>
 </div>
 
-<!-- Confirm delete -->
-<div class="ov" id="cov">
-  <div class="cbox">
-    <h3>Удалить проект?</h3>
-    <p id="ctxt"></p>
-    <div class="cbtns">
-      <button class="btn" onclick="closeC()">Отмена</button>
-      <button class="btn btn-red" style="border:1.5px solid var(--red)" onclick="doDel()">Удалить</button>
-    </div>
-  </div>
-</div>
-
-<div class="toast" id="toast"></div>
-<div class="loading" id="loading"><div class="loading-spinner"></div><div class="loading-txt">Загрузка данных...</div></div>
-<div class="sync-dot" id="sync-dot">💾 Сохранение...</div>
+<div class="ov" id="ov" onmousedown="ovc(event)"><div class="modal" id="modal" role="dialog" aria-modal="true"></div></div>
+<div class="toast" id="toast" role="status"></div>
+<div class="sync-dot" id="sync-dot">Сохранение…</div>
+<div class="loading" id="loading"><div class="spinner"></div>Загрузка данных…</div>
 
 <script src="core.js"></script>
 <script src="app.js"></script>

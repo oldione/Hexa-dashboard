@@ -1,79 +1,65 @@
-// Hexa Dashboard — интерфейс (схема данных v2). Все расчёты — в core.js (HexaCore),
-// общем с MCP-сервером, чтобы дашборд и Claude считали одинаково.
+// Hexa Dashboard — интерфейс (схема данных v2, дизайн «hexabyte»).
+// Все расчёты — в core.js (HexaCore), общем с MCP-сервером: здесь только отрисовка и формы.
+// Никаких зашитых значений: месяцы, курсы, заказчики, типы, суммы — всё из документа Firestore.
 const C = window.HexaCore;
 const { n, r2 } = C;
 
 // ─── AUTH ─────────────────────────────────────────────────────
-// Чтобы сменить пароль — запусти в консоли:
+// Сменить пароль: в консоли
 //   crypto.subtle.digest('SHA-256', new TextEncoder().encode('НовыйПароль'))
 //     .then(b => console.log([...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('')))
-// и вставь результат в AUTH_HASH:
+// и вставить результат в AUTH_HASH.
 const AUTH_HASH = '32e0c7d67ef0e643a0d0b7487b98f8c734c1ad58960063d4bef2c8dd20d35614';
 const AUTH_SK = 'wbd_auth';
-
 async function sha256(str){
-  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+  const buf=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(str));
   return [...new Uint8Array(buf)].map(x=>x.toString(16).padStart(2,'0')).join('');
 }
 function checkAuth(){
-  if(sessionStorage.getItem(AUTH_SK)==='1'){
-    document.getElementById('auth-wall').classList.add('hidden');
-    showLoading(true);
-    initFirestore();
-  }
+  if(sessionStorage.getItem(AUTH_SK)==='1'){$('auth-wall').classList.add('hidden');showLoading(true);initFirestore();}
+  else setTimeout(()=>$('auth-input').focus(),50);
 }
 async function authSubmit(){
-  const val=document.getElementById('auth-input').value;
-  const err=document.getElementById('auth-err');
-  if(await sha256(val)===AUTH_HASH){
-    sessionStorage.setItem(AUTH_SK,'1');
-    document.getElementById('auth-wall').classList.add('hidden');
-    showLoading(true);
-    initFirestore();
+  if(await sha256($('auth-input').value)===AUTH_HASH){
+    sessionStorage.setItem(AUTH_SK,'1');$('auth-wall').classList.add('hidden');showLoading(true);initFirestore();
   }else{
-    err.textContent='Неверный пароль';
-    document.getElementById('auth-input').value='';
-    document.getElementById('auth-input').focus();
-    setTimeout(()=>{err.textContent='';},2500);
+    $('auth-err').textContent='Неверный пароль';$('auth-input').value='';$('auth-input').focus();
+    setTimeout(()=>{$('auth-err').textContent='';},2500);
   }
 }
 
 // ─── FIREBASE ─────────────────────────────────────────────────
 firebase.initializeApp({
-  apiKey: "AIzaSyAy2dKkjq0mukLj_JO8Iqz5ebnca7ZMIQw",
-  authDomain: "hexa-web-dev.firebaseapp.com",
-  projectId: "hexa-web-dev",
-  storageBucket: "hexa-web-dev.firebasestorage.app",
-  messagingSenderId: "617618063520",
-  appId: "1:617618063520:web:0b86398afa0756edbd09c5"
+  apiKey:"AIzaSyAy2dKkjq0mukLj_JO8Iqz5ebnca7ZMIQw",
+  authDomain:"hexa-web-dev.firebaseapp.com",
+  projectId:"hexa-web-dev",
+  storageBucket:"hexa-web-dev.firebasestorage.app",
+  messagingSenderId:"617618063520",
+  appId:"1:617618063520:web:0b86398afa0756edbd09c5"
 });
-const DOC = firebase.firestore().collection('webdev').doc('dashboard');
+const DOC=firebase.firestore().collection('webdev').doc('dashboard');
 
 // ─── STATE ────────────────────────────────────────────────────
-let D=null;               // документ v2 (C.normalize)
-let readOnly=true;        // пока не загружены корректные данные — ничего не пишем
-let aid=null, eid=null, did=null;
-let fClient='', fType='', fStatus='Все', fPay='';
-let editEntryId=null;     // запись часов, которую редактируем в форме
-let _saving=false;
+let D=null, readOnly=true, _saving=false;
+let aid=null;                 // раскрытый проект
+let view='list', showAll=false, fDebt=false;
 let currentTab='projects';
 const excludedProjects=new Set();
+const PAGE=12;
+let M=null;                   // состояние открытого модального окна
 
-const STATUSES=[
-  {val:'Сдан',       cls:'сдан',       dot:'#0FC47A', bg:'#E4F9EF', color:'#0A6E40'},
-  {val:'В работе',   cls:'вработе',    dot:'#F59E0B', bg:'#FFFBEB', color:'#854D0E'},
-  {val:'Холд',       cls:'холд',       dot:'#F05252', bg:'#FEE2E2', color:'#991B1B'},
-  {val:'На проверке',cls:'напроверке', dot:'#3B82F6', bg:'#EFF6FF', color:'#1E40AF'},
-  {val:'На обслуживании',cls:'наобслуживании', dot:'#8B5CF6', bg:'#F3E8FF', color:'#6B21A8'},
-  {val:'Обсуждение', cls:'обсуждение', dot:'#94A3B8', bg:'#F1F5F9', color:'#475569'},
-];
+// ─── ОФОРМЛЕНИЕ (не данные) ───────────────────────────────────
+const STATUS_DOT={'Сдан':'#22A06B','В работе':'#F59E0B','Холд':'#F05252','На проверке':'#3B82F6','На обслуживании':'#94A3B8','Обсуждение':'#CBD5E1'};
 const PAY={
-  not_invoiced:{cls:'p-none',   label:'Без счёта'},
-  awaiting:    {cls:'p-no',     label:'Ждём оплату'},
-  partial:     {cls:'p-partial',label:'Частично'},
-  paid:        {cls:'p-yes',    label:'Оплачен'},
+  not_invoiced:{label:'Без счёта',   name:'без счёта',        fg:'#5B6472'},
+  awaiting:    {label:'Ждём оплату', name:'ждём оплату',      fg:'#854D0E'},
+  partial:     {label:'Частично',    name:'оплачен частично', fg:'#854D0E'},
+  paid:        {label:'Оплачен',     name:'оплачен',          fg:'#5B6472'},
 };
-const INV_ST={draft:'Черновик',sent:'Отправлен',paid:'Оплачен',cancelled:'Отменён'};
+const INV_ST={draft:'Черновик',sent:'Ждём оплату',paid:'Оплачен',cancelled:'Отменён'};
+const TILES=[['#F6E3A6','#5A4500'],['#CFE6E1','#1F4A43'],['#F4D2C4','#6B2E17'],['#D3E0F2','#1F3F6B'],['#E2D8F0','#43306B']];
+const DONUT=['#16202D','#FBCB08','#9F5CF7','#4CBBE4','#22A06B','#F4D2C4'];
+const SERIES={rec:'#FBCB08',inv:'#4CBBE4',exp:'#16202D',prof:'#9F5CF7'};
 const ISSUE_TITLES={
   hours_no_invoices:'Часы есть, счетов нет',
   invoice_overdue:'Счёт ждёт оплаты дольше 30 дней',
@@ -87,254 +73,332 @@ const ISSUE_TITLES={
   origin_unknown:'Не указано: свой проект или чужой',
   needs_full_invoice:'Нужен счёт на полную сумму',
 };
+const TABS=[
+  ['projects','Проекты','M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z'],
+  ['monthly','По месяцам','M5.5 5h13A2.5 2.5 0 0 1 21 7.5v11a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 18.5v-11A2.5 2.5 0 0 1 5.5 5ZM3 10h18M8 3v4M16 3v4'],
+  ['clients','Заказчики','M12.5 8a3.5 3.5 0 1 1-7 0 3.5 3.5 0 0 1 7 0ZM2.5 20c.6-3.6 3.2-5.5 6.5-5.5s5.9 1.9 6.5 5.5M16 4.8a3.5 3.5 0 0 1 0 6.4M18.5 14.8c1.7.8 2.7 2.6 3 5.2'],
+  ['receivables','Дебиторка','M5.5 6h13A2.5 2.5 0 0 1 21 8.5v8a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 16.5v-8A2.5 2.5 0 0 1 5.5 6ZM3 10h18M16 15h2'],
+  ['issues','Проверка','M18 11a7 7 0 1 1-14 0 7 7 0 0 1 14 0ZM20 20l-3.6-3.6M8.5 11l2 2 3.5-4'],
+];
+const TAB_TITLE={projects:'Проекты',monthly:'По месяцам',clients:'Заказчики',receivables:'Дебиторка',issues:'Проверка данных'};
 
 // ─── HELPERS ──────────────────────────────────────────────────
 const $=id=>document.getElementById(id);
-function fmt(v){return Math.round(v).toLocaleString('ru-RU')}
-function fmt2(v){return (+v).toLocaleString('ru-RU',{maximumFractionDigits:2})}
-function fh(v){return v%1===0?v:parseFloat((+v).toFixed(2))}
-function esc(s){return(s||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'")}
+const fmt=v=>Math.round(v).toLocaleString('ru-RU');
+const usd=v=>(v<0?'−$':'$')+fmt(Math.abs(v));
+const usd2=v=>(v<0?'−$':'$')+Math.abs(v).toLocaleString('ru-RU',{minimumFractionDigits:0,maximumFractionDigits:2});
+const num=v=>(+v).toLocaleString('ru-RU',{maximumFractionDigits:2});
+const hrs=v=>(+v).toLocaleString('ru-RU',{maximumFractionDigits:2});
+const pct=(a,b)=>b>0?(Math.round(a/b*1000)/10).toLocaleString('ru-RU')+'%':'—';
+const dash='—';
+function esc(s){return String(s??'').replace(/\\/g,'\\\\').replace(/'/g,"\\'")}
 function escH(s){return String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
 const proj=id=>D.projects.find(p=>p.id===id);
 const clientName=p=>C.refName(D.clients,p.clientId);
 const typeName=p=>C.refName(D.types,p.typeId);
 const months=()=>D.months.map(m=>m.month);
 const lastMonth=()=>D.months.length?D.months[D.months.length-1].month:'';
+// текущий месяц, если он есть на шкале, иначе последний
+const defaultMonth=()=>{const m=C.dateToMonth(C.todayISO());return D.months.some(x=>x.month===m)?m:lastMonth();};
 const stats=(p,opt)=>C.projectStats(D,p,opt);
-const dash='<span style="color:var(--text3)">—</span>';
-const money=v=>v?'$'+fmt(v):dash;
+const RU_GEN=['января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря'];
+function dateRu(iso){const d=new Date(iso);return isNaN(d)?'':`${d.getDate()} ${RU_GEN[d.getMonth()]} ${d.getFullYear()}`}
+function dmy(iso){const m=/^(\d{4})-(\d{2})-(\d{2})/.exec(iso||'');return m?`${m[3]}.${m[2]}.${m[1]}`:(iso||dash)}
+function tileOf(p){const i=Math.max(0,D.types.findIndex(t=>t.id===p.typeId));return TILES[i%TILES.length]}
+function monthOptions(sel,empty){
+  return (empty!==undefined?`<option value="">${empty}</option>`:'')+months().map(m=>`<option value="${m}"${m===sel?' selected':''}>${m}</option>`).join('');
+}
+function invoicePaid(inv){return D.payments.filter(x=>x.invoiceId===inv.id).reduce((s,x)=>s+n(x.amount),0)}
+function svgIcon(d,size=20){return `<svg aria-hidden="true" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="${d}"/></svg>`}
+const CHEV='<svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>';
+const XICON='<svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>';
 
-// Безопасный калькулятор сумм ("2101+2101") — без eval
+// Калькулятор сумм ("2101+2101") без eval
 function evalAmount(raw){
   if(raw===null||raw===undefined) return null;
   const s=String(raw).replace(/,/g,'.').replace(/\s+/g,'');
-  if(!s) return null;
-  if(!/^[\d+\-*/().]+$/.test(s)) return null;
+  if(!s||!/^[\d+\-*/().]+$/.test(s)) return null;
   let i=0;
-  const num=()=>{const m=/^\d+(\.\d+)?|^\.\d+/.exec(s.slice(i));if(!m)throw 0;i+=m[0].length;return parseFloat(m[0]);};
-  const fac=()=>{if(s[i]==='-'){i++;return -fac();}if(s[i]==='('){i++;const v=ex();if(s[i++]!==')')throw 0;return v;}return num();};
+  const numt=()=>{const m=/^\d+(\.\d+)?|^\.\d+/.exec(s.slice(i));if(!m)throw 0;i+=m[0].length;return parseFloat(m[0]);};
+  const fac=()=>{if(s[i]==='-'){i++;return -fac();}if(s[i]==='('){i++;const v=ex();if(s[i++]!==')')throw 0;return v;}return numt();};
   const term=()=>{let v=fac();while(s[i]==='*'||s[i]==='/'){const o=s[i++];const r=fac();v=o==='*'?v*r:v/r;}return v;};
   const ex=()=>{let v=term();while(s[i]==='+'||s[i]==='-'){const o=s[i++];const r=term();v=o==='+'?v+r:v-r;}return v;};
   try{const v=ex();return i===s.length&&isFinite(v)?r2(v):null;}catch(e){return null;}
 }
 
-function statusBadge(s){
-  if(!s) return '';
-  const info=STATUSES.find(x=>x.val===s);
-  if(!info) return `<span class="sbadge s-default">${escH(s)}</span>`;
-  return `<span class="sbadge" style="background:${info.bg};color:${info.color}"><span style="width:6px;height:6px;border-radius:50%;background:${info.dot};display:inline-block;flex-shrink:0"></span>${s}</span>`;
-}
-const payBadge=st=>`<span class="pbadge ${PAY[st].cls}">${PAY[st].label}</span>`;
-function profitBadge(v){if(!v)return '';return `<span class="pfbadge ${v==='Да'?'pf-yes':'pf-no'}">Профит: ${v}</span>`;}
-function originBadge(p){
-  if(p.origin==='inherited') return '<span class="orig-badge orig-inh" title="Чужой проект на поддержке">↪ чужой</span>';
-  if(!p.origin) return '<span class="orig-badge orig-unk" title="Не указано: свой или чужой">? происхождение</span>';
-  return '';
-}
-function warrantyEnd(m){return m&&C.isMonth(m)?C.shiftMonth(m,2):null}
-function monthOptions(sel,withEmpty){
-  return (withEmpty?`<option value="">${withEmpty}</option>`:'')+months().map(m=>`<option value="${m}"${m===sel?' selected':''}>${m}</option>`).join('');
-}
-
 // ─── FIRESTORE ────────────────────────────────────────────────
 async function persist(){
-  if(readOnly||!D){toast('⚠ Только чтение — изменения не сохранены');return;}
+  if(readOnly||!D){toast('Только чтение — изменения не сохранены');return;}
   try{
     _saving=true;showSync(true);
     D.updatedAt=new Date().toISOString();
-    await DOC.set(JSON.parse(JSON.stringify(D))); // JSON — убираем undefined (Firestore их не принимает)
-  }catch(e){
-    toast('⚠ Ошибка сохранения: '+e.message);console.error(e);
-  }finally{showSync(false);_saving=false;}
+    await DOC.set(JSON.parse(JSON.stringify(D)));
+  }catch(e){toast('Ошибка сохранения: '+e.message);console.error(e);}
+  finally{showSync(false);_saving=false;}
 }
-
 function initFirestore(){
   DOC.onSnapshot(snap=>{
     showLoading(false);
     if(_saving) return;
-    if(!snap.exists){blocker('Документ webdev/dashboard не найден. Восстанови данные из экспорта через «Импорт».');readOnly=false;D=C.normalize({schemaVersion:C.SCHEMA_VERSION});render();return;}
+    if(!snap.exists){blocker('Документ webdev/dashboard не найден. Восстанови данные через «Импорт».');readOnly=false;D=C.normalize({schemaVersion:C.SCHEMA_VERSION});render();return;}
     const data=snap.data();
-    if((data.schemaVersion||0)<C.SCHEMA_VERSION){
-      readOnly=true;
-      blocker('Данные ещё в старом формате. Дашборд обновлён, а миграция базы пока не выполнена — изменения не сохраняются. Запусти mcp/scripts/migrate.mjs.');
-      return;
-    }
-    blocker(null);
-    readOnly=false;
+    if((data.schemaVersion||0)<C.SCHEMA_VERSION){readOnly=true;blocker('Данные в старом формате — изменения не сохраняются. Нужна миграция: mcp/scripts/migrate.mjs.');return;}
+    blocker(null);readOnly=false;
     D=C.normalize(data);
-    syncSettingsInputs();
-    render();
-  },err=>{showLoading(false);toast('⚠ Ошибка подключения: '+err.message);console.error(err);});
+    syncSettingsInputs();render();
+  },err=>{showLoading(false);toast('Ошибка подключения: '+err.message);console.error(err);});
 }
-function blocker(msg){
-  let el=$('blocker');
-  if(!msg){if(el)el.remove();return;}
-  if(!el){el=document.createElement('div');el.id='blocker';el.className='blocker';document.querySelector('.main').prepend(el);}
-  el.innerHTML='⚠ '+escH(msg);
-}
+function blocker(msg){$('blocker-slot').innerHTML=msg?`<div class="blocker">${escH(msg)}</div>`:''}
 function showLoading(v){$('loading').style.display=v?'flex':'none'}
 function showSync(v){$('sync-dot').classList.toggle('show',v)}
 
-// ─── SETTINGS ─────────────────────────────────────────────────
-function syncSettingsInputs(){
-  const s=D.settings;
-  for(const [id,k] of [['rate','rate'],['costrate','costRate'],['eurrate','eurRate'],['expdelay','expDelay']]){
-    if(document.activeElement!==$(id)) $(id).value=s[k];
-  }
-}
+// ─── НАСТРОЙКИ ────────────────────────────────────────────────
+const SETTINGS=[['rate','rate'],['costrate','costRate'],['eurrate','eurRate'],['expdelay','expDelay']];
+function syncSettingsInputs(){for(const [id,k] of SETTINGS) if(document.activeElement!==$(id)) $(id).value=D.settings[k];}
 let _setT=null;
 function onSettingInput(id,k,int){
   const v=int?parseInt($(id).value,10):parseFloat($(id).value);
   if(!(v>=0)) return;
-  D.settings[k]=v;
-  renderCurrent();
+  D.settings[k]=v;renderCurrent();
   clearTimeout(_setT);_setT=setTimeout(persist,600);
 }
 
-// ─── FILTERS ──────────────────────────────────────────────────
-function filtered(){
-  const q=$('search').value.toLowerCase();
-  const mn=n($('fmin').value)||0;
-  const mx=$('fmax').value===''?Infinity:n($('fmax').value);
-  return D.projects.filter(p=>{
-    if(fClient&&p.clientId!==fClient) return false;
-    if(fType&&p.typeId!==fType) return false;
-    if(fStatus!=='Все'&&(p.status||'')!==fStatus) return false;
-    const s=stats(p);
-    if(fPay&&s.paymentStatus!==fPay) return false;
-    if(s.received<mn||s.received>mx) return false;
-    if(q&&!p.site.toLowerCase().includes(q)&&!clientName(p).toLowerCase().includes(q)&&!typeName(p).toLowerCase().includes(q)) return false;
-    return true;
-  });
-}
-function setC(c){fClient=c;closeD();render();closeDrawer();if(currentTab!=='projects')switchTab('projects');}
-function setT(t){fType=t;closeD();render()}
-function setSt(s){fStatus=s;closeD();render()}
-function setPay(s){fPay=s;closeD();render()}
-function reset(){
-  fClient='';fType='';fStatus='Все';fPay='';
-  $('search').value='';$('fmin').value='';$('fmax').value='';
-  closeD();render();
-}
-
-// ─── RENDER: PROJECTS ─────────────────────────────────────────
+// ─── РЕНДЕР: общий ────────────────────────────────────────────
 function render(){
   if(!D) return;
-  renderNav();renderTypes();renderStatusPills();renderPayPills();renderCards();renderTable();
-  fillDatalists();renderTabCounts();
-  if(aid) renderDet();
-  if(currentTab!=='projects') renderCurrent();
+  renderNav();renderHeader();renderCurrent();
 }
 function renderCurrent(){
   if(!D) return;
-  if(currentTab==='projects'){renderCards();renderTable();if(aid)renderDet();}
+  renderNav();
+  if(currentTab==='projects') renderProjects();
   else if(currentTab==='monthly') renderMonthly();
   else if(currentTab==='clients') renderClients();
   else if(currentTab==='receivables') renderReceivables();
   else if(currentTab==='issues') renderIssues();
-  renderTabCounts();
 }
-function renderTabCounts(){
-  const rc=C.receivables(D);
-  $('cnt-receivables').textContent=rc.length?'$'+fmt(rc.reduce((s,r)=>s+r.outstanding,0)):'';
-  const iss=C.dataIssues(D).length;
-  $('cnt-issues').textContent=iss||'';
+function renderHeader(){
+  $('eyebrow').textContent='Дашборд'+(D&&D.updatedAt?' · обновлено '+dateRu(D.updatedAt):'');
+  $('page-title').textContent=TAB_TITLE[currentTab];
+  $('mob-title').textContent=TAB_TITLE[currentTab];
+  $('proj-tools').style.display=currentTab==='projects'?'':'none';
+  $('v-grid').classList.toggle('on',view==='grid');$('v-list').classList.toggle('on',view==='list');
 }
-
 function renderNav(){
-  if(fClient&&!D.clients.some(c=>c.id===fClient)) fClient='';
-  const used=D.clients.filter(c=>D.projects.some(p=>p.clientId===c.id)).sort((a,b)=>a.name.localeCompare(b.name));
-  const items=[{id:'',name:'Все клиенты',cnt:D.projects.length},...used.map(c=>({id:c.id,name:c.name,cnt:D.projects.filter(p=>p.clientId===c.id).length}))];
-  $('nav').innerHTML=items.map(c=>`<div class="ni${fClient===c.id?' on':''}" onclick="setC('${c.id}')"><span class="nl">${escH(c.name)}</span><span class="nc">${c.cnt}</span></div>`).join('');
-  $('mob-clients').innerHTML=items.map(c=>`<div class="mob-pill${fClient===c.id?' on':''}" onclick="setC('${c.id}')">${c.id?escH(c.name):'Все'}<span class="mc">${c.cnt}</span></div>`).join('');
+  const rc=D?C.receivables(D).length:0, iss=D?C.dataIssues(D).length:0;
+  const badge={receivables:rc||'',issues:iss||''};
+  $('nav').innerHTML=TABS.map(([k,l,d])=>`<button class="nav-btn${currentTab===k?' on':''}" onclick="switchTab('${k}')"${currentTab===k?' aria-current="page"':''}>${svgIcon(d)}<span class="lbl">${l}</span><span class="badge">${badge[k]||''}</span></button>`).join('');
 }
-function renderTypes(){
-  if(fType&&!D.types.some(t=>t.id===fType)) fType='';
-  const used=D.types.filter(t=>D.projects.some(p=>p.typeId===t.id)).sort((a,b)=>a.name.localeCompare(b.name));
-  $('type-pills').innerHTML=[`<div class="pill${!fType?' on':''}" onclick="setT('')">Все типы</div>`,
-    ...used.map(t=>`<div class="pill${fType===t.id?' on':''}" onclick="setT('${t.id}')">${escH(t.name)}</div>`)].join('');
-}
-function renderStatusPills(){
-  $('status-pills').innerHTML=`<div class="spill${fStatus==='Все'?' on':''}" onclick="setSt('Все')">Все статусы</div>`+STATUSES.map(s=>{
-    const cnt=D.projects.filter(p=>p.status===s.val).length;
-    return `<div class="spill${fStatus===s.val?` on ss-${s.cls}`:''}" onclick="setSt('${esc(s.val)}')"><span class="spill-dot" style="background:${s.dot}"></span>${s.val} <span style="font-size:10px;opacity:.7">${cnt}</span></div>`;
-  }).join('');
-}
-function renderPayPills(){
-  const cnt={};for(const p of D.projects){const s=stats(p).paymentStatus;cnt[s]=(cnt[s]||0)+1;}
-  $('pay-pills').innerHTML=`<div class="spill${!fPay?' on':''}" onclick="setPay('')">Все</div>`+C.PAY_STATUSES.map(k=>
-    `<div class="spill${fPay===k?' on':''}" onclick="setPay('${k}')"><span class="pbadge ${PAY[k].cls}" style="padding:0 6px">${PAY[k].label}</span> <span style="font-size:10px;opacity:.7">${cnt[k]||0}</span></div>`).join('');
-}
-function renderCards(){
-  const list=filtered();
-  let inv=0,rec=0,debt=0,exp=0,h=0,hb=0,hs=0,pr=0,epr=0;
-  for(const p of list){const s=stats(p);inv+=s.invoiced;rec+=s.received;debt+=s.debt;exp+=s.expense;h+=s.hours;hb+=s.byPhase.build.hours;hs+=s.byPhase.support.hours;pr+=s.profit;epr+=s.expectedProfit;}
-  const m=rec>0?Math.round(pr/rec*1000)/10:0;
-  const debtors=list.filter(p=>stats(p).debt>0).length;
-  $('cards').innerHTML=`
-    <div class="sc c1"><div class="sc-ico">💰</div><div class="sc-lbl">Получено</div><div class="sc-val v-teal">$${fmt(rec)}</div><div class="sc-sub">выставлено $${fmt(inv)} · ${list.length} проектов</div></div>
-    <div class="sc c4"><div class="sc-ico">💸</div><div class="sc-lbl">Должны</div><div class="sc-val v-yel">$${fmt(debt)}</div><div class="sc-sub">${debtors?`${debtors} проект(ов) с долгом`:'долгов нет'}</div></div>
-    <div class="sc c2"><div class="sc-ico">⏱</div><div class="sc-lbl">Расход</div><div class="sc-val">$${fmt(exp)}</div><div class="sc-sub">${fh(r2(h))} ч · разраб. ${fh(r2(hb))} · поддержка ${fh(r2(hs))}</div></div>
-    <div class="sc c3"><div class="sc-ico">📈</div><div class="sc-lbl">Профит · маржа ${m}%</div><div class="sc-val v-green">$${fmt(pr)}</div><div class="sc-sub">ожидаемый с долгами $${fmt(epr)}</div></div>`;
+function switchTab(tab){
+  currentTab=tab;
+  for(const [k] of TABS) $('view-'+k).classList.toggle('on',k===tab);
+  renderHeader();renderCurrent();closeDrawer();
+  window.scrollTo(0,0);
 }
 
-function renderTable(){
+// ─── ПРОЕКТЫ ──────────────────────────────────────────────────
+function filtered(){
+  const q=$('search').value.trim().toLowerCase();
+  const cl=$('f-client').value, ty=$('f-type').value, st=$('f-status').value, pay=$('f-pay').value;
+  const mn=$('fmin').value===''?-Infinity:n($('fmin').value);
+  const mx=$('fmax').value===''?Infinity:n($('fmax').value);
+  return D.projects.filter(p=>{
+    if(cl&&p.clientId!==cl) return false;
+    if(ty&&p.typeId!==ty) return false;
+    if(st&&(p.status||'')!==st) return false;
+    const s=stats(p);
+    if(pay&&s.paymentStatus!==pay) return false;
+    if(fDebt&&!(s.debt>0)) return false;
+    if(s.received<mn||s.received>mx) return false;
+    if(q&&!(p.site+' '+clientName(p)+' '+typeName(p)+' '+(p.note||'')).toLowerCase().includes(q)) return false;
+    return true;
+  });
+}
+function onFilter(){showAll=false;renderProjects();}
+function toggleDebt(){fDebt=!fDebt;onFilter();}
+function setView(v){view=v;renderHeader();renderProjects();}
+function reset(){
+  for(const id of ['search','fmin','fmax']) $(id).value='';
+  for(const id of ['f-client','f-type','f-status','f-pay']) $(id).value='';
+  fDebt=false;showAll=false;aid=null;renderProjects();
+}
+function setClientFilter(id){
+  if(currentTab!=='projects') switchTab('projects');
+  reset();$('f-client').value=id;renderProjects();
+}
+
+function fillSelect(id,options){
+  const el=$(id),cur=el.value;
+  el.innerHTML=options.map(([v,l])=>`<option value="${escH(v)}">${escH(l)}</option>`).join('');
+  el.value=options.some(o=>o[0]===cur)?cur:'';
+}
+function renderFilters(){
+  const cnt=(key)=>{const m={};for(const p of D.projects){const k=key(p);m[k]=(m[k]||0)+1;}return m;};
+  const byC=cnt(p=>p.clientId), byT=cnt(p=>p.typeId), byS=cnt(p=>p.status||''), byP=cnt(p=>stats(p).paymentStatus);
+  fillSelect('f-client',[['','Все заказчики'],...D.clients.filter(c=>byC[c.id]).sort((a,b)=>byC[b.id]-byC[a.id]||a.name.localeCompare(b.name)).map(c=>[c.id,`${c.name} · ${byC[c.id]}`])]);
+  fillSelect('f-type',[['','Все типы'],...D.types.filter(t=>byT[t.id]).sort((a,b)=>a.name.localeCompare(b.name)).map(t=>[t.id,`${t.name} · ${byT[t.id]}`])]);
+  fillSelect('f-status',[['','Все статусы'],...C.STATUSES.map(s=>[s,`${s} · ${byS[s]||0}`])]);
+  fillSelect('f-pay',[['','Любая оплата'],...C.PAY_STATUSES.map(s=>[s,`${PAY[s].label} · ${byP[s]||0}`])]);
+  $('f-debt').classList.toggle('on',fDebt);$('f-debt').setAttribute('aria-pressed',fDebt);
+}
+
+function renderProjects(){
+  renderFilters();
   const list=filtered();
-  const tbody=$('tbody'), det=$('det');
-  if(det.parentElement!==$('det-home')) $('det-home').appendChild(det);
+  renderKpis(list);
+  const rows=C.monthlyStats(D);
+  $('legend-p').innerHTML=legendHTML();
+  $('chart-projects').innerHTML=chartHTML(rows);
+  $('donut-projects').innerHTML=donutHTML(D.projects,false);
+  $('ptitle').textContent=`${list.length===D.projects.length?'Все проекты':'Проекты'} · ${list.length}`;
+  renderList(list);
+}
+function renderKpis(list){
+  let inv=0,rec=0,debt=0,exp=0,h=0,hs=0,pr=0,epr=0,debtors=0;
+  for(const p of list){const s=stats(p);inv+=s.invoiced;rec+=s.received;debt+=s.debt;exp+=s.expense;h+=s.hours;hs+=s.byPhase.support.hours;pr+=s.profit;epr+=s.expectedProfit;if(s.debt>0)debtors++;}
+  $('cards').innerHTML=`
+    <div class="kpi kpi-accent"><span class="k-l">Получено</span><span class="k-v">${usd(rec)}</span><span class="k-s">выставлено ${usd(inv)} · проектов: ${list.length}</span></div>
+    <div class="kpi kpi-ink"><span class="k-l">Профит · маржа ${pct(pr,rec)}</span><span class="k-v">${usd(pr)}</span><span class="k-s">с долгами будет ${usd(epr)}</span></div>
+    <div class="kpi kpi-violet"><span class="k-l">Должны</span><span class="k-v">${usd(debt)}</span><span class="k-s">${debtors?`проектов с долгом: ${debtors}`:'долгов нет'}</span></div>
+    <div class="kpi kpi-white"><span class="k-l">Расход на часы</span><span class="k-v">${usd(exp)}</span><span class="k-s">${hrs(r2(h))} ч, из них поддержка ${hrs(r2(hs))}</span></div>`;
+}
+
+function renderList(list){
+  const box=$('plist');
   const ae=document.activeElement;
   const keep=ae&&ae.classList&&ae.classList.contains('pnote')?{id:ae.dataset.id,v:ae.value,s:ae.selectionStart,e:ae.selectionEnd}:null;
-  $('ptitle').textContent=`Проектов: ${list.length}`;
-  if(!list.length){tbody.innerHTML=`<tr><td colspan="8" class="empty-row">Ничего не найдено</td></tr>`;det.style.display='none';return;}
-  tbody.innerHTML=list.map(p=>{
-    const s=stats(p);
-    const mc=s.margin>=75?'#0FC47A':s.margin>=55?'#F59E0B':'#F05252';
-    const mp=Math.max(0,Math.min(100,s.margin));
-    const wb=p.warn?`<span class="bdg ba">⚠</span>`:'';
-    const deliv=p.deliveryMonth?`<span class="deliv-tag">📅 ${p.deliveryMonth}</span>`:'';
-    const refb=n(p.refPct)>0?`<span class="ref-badge">🤝 ${n(p.refPct)}%</span>`:'';
-    const sel=aid===p.id;
-    return`<tr data-id="${p.id}" onclick="tog('${p.id}')" class="prow${sel?' sel':''}">
-      <td>
-        <div class="pn">${escH(p.site)}${wb}</div>
-        <div class="pm">${escH(clientName(p))}${typeName(p)?' · '+escH(typeName(p)):''}</div>
-        <div class="p-badges">${statusBadge(p.status)}${payBadge(s.paymentStatus)}${profitBadge(p.profitShared)}${originBadge(p)}${deliv}${refb}</div>
-      </td>
-      <td class="note-td" onclick="event.stopPropagation()"><textarea class="pnote" data-id="${p.id}" rows="2" placeholder="Заметка…" oninput="noteInput(this)" onblur="saveNote(this)">${escH(p.note)}</textarea></td>
-      <td class="r">${money(s.received)}${s.invoiced>s.received+0.5?`<div class="sub-r">из $${fmt(s.invoiced)}</div>`:''}</td>
-      <td class="r ${s.debt>0?'debt':''}">${s.debt>0?'$'+fmt(s.debt):dash}</td>
-      <td class="r">${fh(s.hours)}${s.byPhase.support.hours>0?`<div class="sub-r">подд. ${fh(s.byPhase.support.hours)}</div>`:''}</td>
-      <td class="r">$${fmt(s.expense)}</td>
-      <td class="r ${s.profit>=0?'pos':'neg'}">$${fmt(s.profit)}</td>
-      <td><div class="mbar"><div class="mbt"><div class="mbf" style="width:${mp}%;background:${mc}"></div></div><span class="mbn">${s.received>0?Math.round(s.margin*10)/10+'%':'—'}</span></div></td>
-    </tr>${sel?`<tr class="det-row"><td colspan="8" id="det-slot"></td></tr>`:''}`;
-  }).join('');
-  const slot=$('det-slot');
-  if(slot) slot.appendChild(det); else det.style.display='none';
-  if(keep){const t=tbody.querySelector(`.pnote[data-id="${keep.id}"]`);if(t){t.value=keep.v;t.focus();try{t.setSelectionRange(keep.s,keep.e);}catch(e){}}}
-  tbody.querySelectorAll('.pnote').forEach(autoGrow);
+  if(!list.length){box.innerHTML='<p class="empty">Ничего не найдено. Измените запрос или сбросьте фильтры.</p>';return;}
+  let shown=showAll?list:list.slice(0,PAGE);
+  if(aid&&!shown.some(p=>p.id===aid)&&list.some(p=>p.id===aid)){showAll=true;shown=list;}
+  const more=!showAll&&list.length>PAGE?`<button class="btn more" onclick="showAll=true;renderProjects()">Показать все проекты: ${list.length}</button>`:'';
+  box.innerHTML=(view==='grid'
+    ?`<div class="pgrid">${shown.map(gridCard).join('')}</div>`
+    :`<div class="plist">${shown.map(listRow).join('')}</div>`)+(more?`<div style="display:flex;justify-content:center;margin-top:20px">${more}</div>`:'');
+  if(keep){const t=box.querySelector(`.pnote[data-id="${keep.id}"]`);if(t){t.value=keep.v;t.focus();try{t.setSelectionRange(keep.s,keep.e);}catch(e){}}}
+  box.querySelectorAll('.pnote').forEach(autoGrow);
 }
 
-// Раскрытие под строкой; кликнутая строка остаётся на том же месте экрана
-function tog(id){
-  const row=document.querySelector(`#tbody tr[data-id="${id}"]`);
+function projectTags(p,s){
+  const t=[];
+  if(p.warn) t.push('<span class="tag tag-warn" title="Неполные данные">⚠ неполные данные</span>');
+  if(p.origin==='inherited') t.push('<span class="tag tag-inh">чужой</span>');
+  else if(!p.origin) t.push('<span class="tag tag-warn">? свой или чужой</span>');
+  if(p.supportIncluded) t.push('<span class="tag tag-sup">поддержка в стоимости</span>');
+  if(p.profitShared) t.push(`<span class="tag ${p.profitShared==='Да'?'tag-ok':''}">профит поделен: ${p.profitShared.toLowerCase()}</span>`);
+  return t.join('');
+}
+function subLine(p){
+  const parts=[escH(clientName(p))];
+  if(p.deliveryMonth) parts.push('сдан '+p.deliveryMonth);
+  if(n(p.refPct)>0) parts.push('реферал '+num(p.refPct)+'%');
+  return parts.join(' · ');
+}
+function listRow(p){
+  const s=stats(p), [tb,tf]=tileOf(p), open=aid===p.id;
+  return `<div class="prow${open?' open':''}" data-id="${p.id}" onclick="tog('${p.id}',event)">
+    <span class="tile" style="background:${tb};color:${tf}" aria-hidden="true">${escH(p.site.charAt(0).toUpperCase())}</span>
+    <div class="r-name"><span class="r-site">${escH(p.site)}</span><span class="r-sub">${subLine(p)}</span><span class="r-tags">${projectTags(p,s)}</span></div>
+    <div class="r-note" onclick="event.stopPropagation()"><textarea class="pnote" data-id="${p.id}" rows="1" placeholder="Заметка…" aria-label="Заметка по ${escH(p.site)}" oninput="noteInput(this)" onblur="saveNote(this)">${escH(p.note)}</textarea></div>
+    <span class="r-num"><b>${usd(s.received)}</b><span>${s.invoiced>s.received+0.5?'получено из '+usd(s.invoiced):'получено'}</span></span>
+    <span class="r-mid"><span class="cap">${escH(typeName(p)||'без типа')}</span><b>${hrs(s.hours)} ч${s.byPhase.support.hours>0?' · подд. '+hrs(s.byPhase.support.hours):''}</b><span class="st"><i class="dot" style="background:${STATUS_DOT[p.status]||'#CBD5E1'}"></i>${escH(p.status||'без статуса')}</span></span>
+    <span class="r-num"><b>${usd(s.expense)}</b><span>расход</span></span>
+    <span class="r-num"><b class="${s.debt>0?'debt':''}" style="${s.debt>0?'':'color:var(--muted)'}">${s.debt>0?usd(s.debt):dash}</b><span>долг</span></span>
+    <span class="r-prof"><b class="${s.profit>=0?'pos':'neg'}">${usd(s.profit)}</b><span>профит · маржа ${s.received>0?pct(s.profit,s.received):dash}</span><span style="font-weight:700;color:${PAY[s.paymentStatus].fg}">${PAY[s.paymentStatus].name}</span></span>
+    <button class="chev" onclick="tog('${p.id}',event)" aria-expanded="${open}" aria-label="${open?'Свернуть':'Подробнее'}">${CHEV}</button>
+    ${open?panelHTML(p,s):''}
+  </div>`;
+}
+function gridCard(p){
+  const s=stats(p), [tb,tf]=tileOf(p), mw=s.received>0?Math.max(0,Math.min(100,s.margin)):0;
+  return `<article class="gcard${s.debt>0?' has-debt':''}" onclick="openProject('${p.id}','list')">
+    <div class="g-top"><span class="tile" style="background:${tb};color:${tf}" aria-hidden="true">${escH(p.site.charAt(0).toUpperCase())}</span>
+      <div style="min-width:0;display:flex;flex-direction:column;gap:1px"><span class="g-meta">${escH(clientName(p))}${typeName(p)?' · '+escH(typeName(p)):''}</span><span class="g-site">${escH(p.site)}</span></div></div>
+    <div class="g-line"><span class="st"><i class="dot" style="background:${STATUS_DOT[p.status]||'#CBD5E1'};width:10px;height:10px"></i>${escH(p.status||'без статуса')}</span>
+      <span style="color:${s.debt>0?'var(--amber)':PAY[s.paymentStatus].fg}">${s.debt>0?'долг '+usd(s.debt):PAY[s.paymentStatus].name}</span>${p.deliveryMonth?`<span class="muted" style="font-weight:600">сдан ${p.deliveryMonth}</span>`:''}</div>
+    ${p.note?`<div class="g-note">${escH(p.note)}</div>`:''}
+    <div class="g-box">
+      <div class="g-nums"><span><small>Получено</small><b>${usd(s.received)}</b></span><span><small>Часов</small><b>${hrs(s.hours)}</b></span><span style="text-align:right"><small>Профит</small><b class="${s.profit>=0?'pos':'neg'}">${usd(s.profit)}</b></span></div>
+      <div class="mbar"><span><i style="width:${mw}%"></i></span><small>маржа ${s.received>0?pct(s.profit,s.received):dash}</small></div>
+    </div>
+  </article>`;
+}
+
+// ── раскрытый проект ──
+function panelHTML(p,s){
+  const entries=D.hours.filter(h=>h.projectId===p.id).sort((a,b)=>C.cmpMonth(b.month,a.month)||String(b.createdAt||'').localeCompare(String(a.createdAt||'')));
+  const invs=D.invoices.filter(i=>i.projectId===p.id).sort((a,b)=>String(b.issuedAt).localeCompare(String(a.issuedAt)));
+  const pays=D.payments.filter(x=>x.projectId===p.id).sort((a,b)=>C.cmpMonth(b.month,a.month)||String(b.receivedAt).localeCompare(String(a.receivedAt)));
+  const warr=p.deliveryMonth&&p.status==='Сдан'&&C.isMonth(p.deliveryMonth)?`гарантия ${p.deliveryMonth} → ${C.shiftMonth(p.deliveryMonth,2)}`:'';
+  const tags=[
+    p.origin==='inherited'?'<span class="tag tag-inh">чужой проект на поддержке</span>':p.origin==='own'?'<span class="tag">свой проект</span>':'<span class="tag tag-warn">происхождение не указано</span>',
+    p.deliveryMonth?`<span class="tag">сдан ${p.deliveryMonth}${warr?' · '+warr:''}</span>`:'',
+    p.supportIncluded?'<span class="tag tag-sup">поддержка входит в стоимость</span>':'',
+    p.profitShared?`<span class="tag ${p.profitShared==='Да'?'tag-ok':''}">профит поделен: ${p.profitShared.toLowerCase()}</span>`:'',
+    p.warn?'<span class="tag tag-warn">⚠ неполные данные</span>':'',
+  ].join('');
+  const hRows=entries.map(h=>{
+    const manual=h.phaseManual&&h.phase!==C.autoPhase(p,h.month);
+    const note=h.note?escH(h.note):(h.migrated?'<span class="muted">из старых данных</span>':'<span class="warn-txt">нет описания</span>');
+    return `<div class="xi"><span class="l"><b>${h.month}</b> ${h.kind==='cost'?'<span class="ph k-cost" title="ставка себестоимости">себест.</span> ':''}<span class="ph ph-${h.phase}" title="${h.phaseManual?'фаза проставлена вручную':'фаза автоматически'}">${h.phase==='support'?'поддержка':'разработка'}${manual?' ✋':''}</span><br>${note}</span>
+      <span class="v">${hrs(h.hours)} ч × €${num(h.rate)}<small>${usd2(r2(C.entryCostUSD(D,h)))}</small></span>
+      <span class="acts"><button class="ib" title="Изменить" onclick="openHours('${p.id}','${h.id}')">✎</button><button class="ib ib-del" title="Удалить" onclick="delEntry('${h.id}')">✕</button></span></div>`;
+  }).join('');
+  const iRows=invs.map(i=>{
+    const amtUSD=C.invoiceUSD(D,i), paid=invoicePaid(i), left=i.status==='sent'?Math.max(0,amtUSD-paid):0;
+    const age=i.status==='sent'?C.daysBetween(i.issuedAt):null;
+    return `<div class="xi xi-inv"><span class="l"><b>${dmy(i.issuedAt)}</b>${age!==null?` · <span class="${age>C.OVERDUE_DAYS?'warn-txt':''}">${age} дн.</span>`:''}<br>${escH(i.description)||dash}</span>
+      <span class="v">${i.currency==='EUR'?'€'+num(i.amount):usd2(i.amount)}<small>${i.currency==='EUR'?'≈ '+usd(amtUSD)+' · ':''}${left>0?'остаток '+usd2(r2(left)):paid?'оплачено '+usd2(r2(paid)):''}</small></span>
+      <span class="acts"><select class="inv-st inv-${i.status}" aria-label="Статус счёта" onchange="setInvoiceStatus('${i.id}',this.value)">${C.INVOICE_STATUSES.map(st=>`<option value="${st}"${st===i.status?' selected':''}>${INV_ST[st]}</option>`).join('')}</select><button class="ib ib-del" title="Удалить счёт" onclick="delInvoice('${i.id}')">✕</button></span></div>`;
+  }).join('');
+  const yRows=pays.map(x=>{
+    const inv=invs.find(i=>i.id===x.invoiceId);
+    return `<div class="xi"><span class="l"><b>${x.month||'<span class="warn-txt">нет месяца</span>'}</b>${x.receivedAt?' · '+dmy(x.receivedAt):''}<br>${escH(x.note)}${inv?`${x.note?' · ':''}по счёту ${dmy(inv.issuedAt)}`:' <span class="warn-txt">без счёта</span>'}</span>
+      <span class="v">${usd2(x.amount)}</span>
+      <span class="acts"><button class="ib ib-del" title="Удалить поступление" onclick="delPayment('${x.id}')">✕</button></span></div>`;
+  }).join('');
+  return `<div class="xpanel" onclick="event.stopPropagation()">
+    <div class="xkpis">
+      <div class="xkpi"><small>Получено</small><b>${usd(s.received)}</b><span>выставлено ${usd(s.invoiced)}${s.dop>0?' · правки '+usd(s.dop):''}</span></div>
+      <div class="xkpi"><small>Долг</small><b class="${s.debt>0?'debt':''}">${usd(s.debt)}</b><span>${PAY[s.paymentStatus].label}</span></div>
+      <div class="xkpi"><small>Часы · расход</small><b>${hrs(s.hours)} ч · ${usd(s.expense)}</b><span>€${fmt(s.expenseEUR)} · разраб. ${hrs(s.byPhase.build.hours)} ч / ${usd(s.byPhase.build.expense)} · подд. ${hrs(s.byPhase.support.hours)} ч / ${usd(s.byPhase.support.expense)}</span></div>
+      <div class="xkpi"><small>Профит · маржа</small><b class="${s.profit>=0?'pos':'neg'}">${usd(s.profit)} · ${s.received>0?pct(s.profit,s.received):dash}</b><span>ожидаемый ${usd(s.expectedProfit)}${s.referral>0?` · реферал ${num(p.refPct)}% = ${usd(s.referral)}`:''}</span></div>
+    </div>
+    <div class="xtags">${tags}</div>
+    <div class="xcols">
+      <div class="xcol"><h3>Часы <small>${entries.length} зап.</small></h3>${hRows||'<span class="xempty">Часов пока нет</span>'}</div>
+      <div class="xcol"><h3>Счета <small>${invs.length}</small></h3>${iRows||'<span class="xempty">Счетов нет</span>'}</div>
+      <div class="xcol"><h3>Поступления <small>${pays.length}</small></h3>${yRows||'<span class="xempty">Поступлений нет</span>'}</div>
+    </div>
+    <div class="xactions">
+      <button class="btn btn-ink" onclick="openHours('${p.id}')">Внести часы</button>
+      <button class="btn" onclick="openInvoice('${p.id}')">Выставить счёт</button>
+      <button class="btn" onclick="openPayment('${p.id}')">Добавить поступление</button>
+      <button class="btn" onclick="openEdit('${p.id}')">Изменить</button>
+      <button class="btn btn-danger" onclick="askDel('${p.id}')">Удалить</button>
+    </div>
+  </div>`;
+}
+
+// Раскрытие на месте: строка, по которой кликнули, остаётся на том же месте экрана
+function tog(id,ev){
+  if(ev){ev.stopPropagation();if(ev.target.closest&&ev.target.closest('.xpanel,.r-note'))return;}
+  const row=document.querySelector(`.prow[data-id="${id}"]`);
   const top0=row?row.getBoundingClientRect().top:null;
-  editEntryId=null;
-  if(aid===id){aid=null;renderTable();}
-  else{aid=id;renderTable();renderDet();}
-  const row2=document.querySelector(`#tbody tr[data-id="${id}"]`);
+  aid=aid===id?null:id;
+  renderList(filtered());
+  const row2=document.querySelector(`.prow[data-id="${id}"]`);
   if(row2&&top0!==null) window.scrollBy(0,row2.getBoundingClientRect().top-top0);
 }
-function openProject(id){
+function openProject(id,forceView){
   if(currentTab!=='projects') switchTab('projects');
-  fClient='';fType='';fStatus='Все';fPay='';$('search').value='';$('fmin').value='';$('fmax').value='';
-  aid=id;editEntryId=null;render();
-  setTimeout(()=>{const r=document.querySelector(`#tbody tr[data-id="${id}"]`);if(r)r.scrollIntoView({behavior:'smooth',block:'start'});},30);
+  reset();if(forceView){view=forceView;renderHeader();}
+  aid=id;showAll=true;renderProjects();
+  setTimeout(()=>{const r=document.querySelector(`.prow[data-id="${id}"]`);if(r)r.scrollIntoView({behavior:'smooth',block:'start'});},30);
 }
-function closeD(){aid=null;editEntryId=null;$('det').style.display='none';renderTable();}
+function rerender(){render();}
 
-// ─── NOTES ────────────────────────────────────────────────────
-function autoGrow(t){t.style.height='auto';t.style.height=Math.min(t.scrollHeight+2,140)+'px';}
+// ── заметки ──
+function autoGrow(t){t.style.height='auto';t.style.height=Math.min(t.scrollHeight+3,140)+'px';}
 const _noteTimers={};
 function noteInput(t){autoGrow(t);clearTimeout(_noteTimers[t.dataset.id]);_noteTimers[t.dataset.id]=setTimeout(()=>saveNote(t),1200);}
 function saveNote(t){
@@ -345,265 +409,319 @@ function saveNote(t){
   p.note=v;persist();
 }
 
-// ─── DETAIL PANEL ─────────────────────────────────────────────
-function renderDet(){
-  const p=proj(aid);if(!p){aid=null;return;}
-  const s=stats(p);
-  $('ds').textContent=p.site;
-  $('dm').textContent=[clientName(p),typeName(p)].filter(Boolean).join(' · ');
-  let badges='';
-  if(p.status) badges+=`<span class="dh-sbadge">${escH(p.status)}</span>`;
-  badges+=`<span class="dh-pbadge">${PAY[s.paymentStatus].label}</span>`;
-  badges+=`<span class="dh-deliv">${p.origin==='inherited'?'↪ Чужой, на поддержке':p.origin==='own'?'🏗 Свой проект':'❓ Происхождение не указано'}</span>`;
-  if(p.deliveryMonth) badges+=`<span class="dh-deliv">📅 Сдан: ${p.deliveryMonth}</span>`;
-  if(p.supportIncluded) badges+=`<span class="dh-deliv">🛠 Поддержка в стоимости</span>`;
-  if(p.profitShared) badges+=`<span class="dh-pbadge">${p.profitShared==='Да'?'✅':'⏳'} Профит: ${p.profitShared}</span>`;
-  if(s.referral>0) badges+=`<span class="dh-deliv" style="background:rgba(167,139,250,.25)">🤝 Реферал: ${n(p.refPct)}% = $${fmt(s.referral)}</span>`;
-  $('dh-badges').innerHTML=badges;
-  $('warranty-row').innerHTML=p.deliveryMonth&&p.status==='Сдан'?`<div class="warranty-row">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-      Гарантийный период: ${p.deliveryMonth} → ${warrantyEnd(p.deliveryMonth)||'—'}</div>`:'';
-  const mc=s.margin>=75?'var(--green)':s.margin>=55?'var(--amber)':'var(--red)';
-  $('dkpi').innerHTML=`
-    <div class="kpi"><div class="kpi-l">Получено</div><div class="kpi-v kv-blue">$${fmt(s.received)}</div><div class="kpi-s">выставлено $${fmt(s.invoiced)}${s.dop>0?` · правки $${fmt(s.dop)}`:''}</div></div>
-    <div class="kpi"><div class="kpi-l">Долг</div><div class="kpi-v" style="color:${s.debt>0?'var(--amber)':'var(--text3)'}">$${fmt(s.debt)}</div><div class="kpi-s">${PAY[s.paymentStatus].label}</div></div>
-    <div class="kpi"><div class="kpi-l">Часы · расход</div><div class="kpi-v">${fh(s.hours)} ч</div><div class="kpi-s">$${fmt(s.expense)} · €${fmt(s.expenseEUR)}<br>разраб. ${fh(s.byPhase.build.hours)} ч / $${fmt(s.byPhase.build.expense)} · подд. ${fh(s.byPhase.support.hours)} ч / $${fmt(s.byPhase.support.expense)}</div></div>
-    <div class="kpi"><div class="kpi-l">Профит · маржа</div><div class="kpi-v kv-green">$${fmt(s.profit)}</div><div class="kpi-s"><b style="color:${mc}">${s.received>0?Math.round(s.margin*10)/10+'%':'—'}</b> · ожидаемый $${fmt(s.expectedProfit)}</div></div>`;
-  renderHoursSection(p);renderInvoicesSection(p);renderPaymentsSection(p);
-  const det=$('det'),slot=$('det-slot');
-  if(slot&&det.parentElement!==slot) slot.appendChild(det);
-  det.style.display=slot?'block':'none';
+// ─── МОДАЛЬНЫЕ ОКНА ───────────────────────────────────────────
+function openModal(html,small){
+  $('modal').className='modal'+(small?' sm':'');
+  $('modal').innerHTML=html;
+  $('ov').classList.add('open');
+  setTimeout(()=>{const f=$('modal').querySelector('[autofocus],input:not([type=checkbox]),select');if(f)f.focus();},60);
+}
+function closeM(){$('ov').classList.remove('open');M=null;}
+function ovc(e){if(e.target===$('ov'))closeM();}
+function mHead(title,sub){return `<div class="m-head"><div style="min-width:0;display:flex;flex-direction:column;gap:2px"><h2>${title}</h2>${sub?`<span class="sub">${sub}</span>`:''}</div><button class="m-x" onclick="closeM()" aria-label="Закрыть">${XICON}</button></div>`;}
+function mFoot(label,fn,danger){return `<div class="m-foot"><span class="m-err" id="m-err"></span><button class="btn btn-outline" onclick="closeM()">Отмена</button><button class="btn ${danger?'btn-danger-solid':'btn-accent'}" onclick="${fn}">${label}</button></div>`;}
+const mErr=t=>{$('m-err').textContent=t;};
+const fld=(label,inner,cls='')=>`<label class="f ${cls}">${label}${inner}</label>`;
+
+function confirmBox(title,text,label,fn){
+  M={onOk:fn};
+  openModal(mHead(title)+`<p class="m-note" style="background:none;padding:0">${text}</p>`+mFoot(label,'confirmOk()',true),true);
+}
+function confirmOk(){const f=M&&M.onOk;closeM();if(f)f();}
+
+// ── проект ──
+function openAdd(){
+  if(readOnly||!D){toast('Только чтение');return;}
+  openProjectForm(null);
+}
+function openEdit(id){openProjectForm(proj(id));}
+function openProjectForm(p){
+  M={kind:'project',id:p?p.id:null};
+  const v=k=>p?escH(p[k]??''):'';
+  const cl=document.getElementById('f-client').value;
+  openModal(mHead(p?'Изменить проект':'Добавить проект',p?escH(p.site)+' · '+escH(clientName(p)):'')+`
+    <div class="fgrid">
+      ${fld('Сайт / домен *',`<input id="m-site" placeholder="example.com" value="${v('site')}" autofocus>`)}
+      ${fld('Заказчик *',`<input id="m-client" list="m-dl-clients" autocomplete="off" placeholder="${escH(D.clients[0]?.name||'')}" value="${p?escH(clientName(p)):(cl?escH(C.refName(D.clients,cl)):'')}">`)}
+      ${fld('Тип проекта',`<input id="m-type" list="m-dl-types" autocomplete="off" value="${p?escH(typeName(p)):''}">`)}
+      ${fld('Происхождение',`<select id="m-origin">${[['own','Свой — строили сами'],['inherited','Чужой — взяли на поддержку'],['','— не указано —']].map(([k,l])=>`<option value="${k}"${(p?p.origin||'':'own')===k?' selected':''}>${l}</option>`).join('')}</select>`)}
+      ${fld('Доп. расход / правки ($)',`<input id="m-dop" type="number" min="0" placeholder="0" value="${p&&n(p.dop)?p.dop:''}">`)}
+      ${fld('Реферальный % партнёру',`<input id="m-ref" type="number" min="0" max="100" step="0.5" placeholder="0" value="${p&&n(p.refPct)?p.refPct:''}">`)}
+      <label class="chk" style="flex-basis:100%"><input type="checkbox" id="m-warn"${p&&p.warn?' checked':''}>Пометить как неполные данные</label>
+      ${fld('Заметки',`<textarea id="m-note" rows="2" placeholder="Что важно помнить по проекту…">${v('note')}</textarea>`,'w100')}
+    </div>
+    <h3 class="m-sec">Статус</h3>
+    <div class="fgrid">
+      ${fld('Статус проекта',`<select id="m-status"><option value="">— не задан —</option>${C.STATUSES.map(s=>`<option${(p?p.status:'Обсуждение')===s?' selected':''}>${s}</option>`).join('')}</select>`)}
+      ${fld('Месяц сдачи (граница разработка / поддержка)',`<select id="m-deliv">${monthOptions(p?p.deliveryMonth:'','— не сдан —')}</select>`)}
+      ${fld('Профит поделен',`<select id="m-shared">${[['','— не задан —'],['Да','Да'],['Нет','Нет']].map(([k,l])=>`<option value="${k}"${(p?p.profitShared||'':'')===k?' selected':''}>${l}</option>`).join('')}</select>`)}
+      <label class="chk" style="align-self:flex-end"><input type="checkbox" id="m-sup"${p&&p.supportIncluded?' checked':''}>Поддержка входит в стоимость</label>
+    </div>
+    ${p?'':`<h3 class="m-sec">Счёт (необязательно)</h3>
+    <div class="fgrid">
+      ${fld('Сумма счёта',`<input id="m-invamt" placeholder="0 или 1000+500">`)}
+      ${fld('Валюта',`<select id="m-invcur"><option>USD</option><option>EUR</option></select>`)}
+    </div>
+    <p class="info">Будет выставлен счёт со статусом «ждём оплату» на сегодняшнюю дату. Деньги потом — через «Добавить поступление».</p>`}
+    <datalist id="m-dl-clients">${D.clients.map(c=>`<option value="${escH(c.name)}">`).join('')}</datalist>
+    <datalist id="m-dl-types">${D.types.map(c=>`<option value="${escH(c.name)}">`).join('')}</datalist>
+    ${mFoot('Сохранить','saveProject()')}`);
+}
+function saveProject(){
+  const site=$('m-site').value.trim(), client=$('m-client').value.trim();
+  if(!site) return mErr('Укажи домен');
+  if(!client) return mErr('Укажи заказчика');
+  if(D.projects.some(p=>p.id!==M.id&&p.site.toLowerCase()===site.toLowerCase())) return mErr('Такой проект уже есть');
+  let invAmt=null;
+  if(!M.id&&$('m-invamt').value.trim()){invAmt=evalAmount($('m-invamt').value);if(!(invAmt>0)) return mErr('Некорректная сумма счёта');}
+  let p=M.id?proj(M.id):null;
+  if(!p){p={id:C.uid()};D.projects.push(p);}
+  const before={d:p.deliveryMonth,o:p.origin,s:p.status};
+  Object.assign(p,{
+    site, clientId:C.ensureRef(D.clients,client), typeId:C.ensureRef(D.types,$('m-type').value),
+    origin:$('m-origin').value, status:$('m-status').value, deliveryMonth:$('m-deliv').value,
+    dop:n($('m-dop').value), refPct:n($('m-ref').value), warn:$('m-warn').checked,
+    supportIncluded:$('m-sup').checked, profitShared:$('m-shared').value, note:$('m-note').value.replace(/\s+$/,''),
+  });
+  if(before.d!==p.deliveryMonth||before.o!==p.origin||before.s!==p.status) C.refreshPhases(D,p.id);
+  if(invAmt) D.invoices.push({id:'i'+C.uid(),projectId:p.id,amount:invAmt,currency:$('m-invcur').value,issuedAt:C.todayISO(),description:'Разработка',status:'sent'});
+  const isNew=!M.id;
+  closeM();persist();aid=p.id;
+  if(isNew) openProject(p.id,'list'); else render();
+}
+function askDel(id){
+  const p=proj(id);if(!p)return;
+  const cnt=k=>D[k].filter(x=>x.projectId===p.id).length;
+  confirmBox('Удалить проект?',`«${escH(p.site)}» будет удалён вместе с записями часов (${cnt('hours')}), счетами (${cnt('invoices')}) и поступлениями (${cnt('payments')}). Это нельзя отменить.`,'Удалить',()=>{
+    D.projects=D.projects.filter(x=>x.id!==id);
+    for(const k of ['hours','invoices','payments']) D[k]=D[k].filter(x=>x.projectId!==id);
+    if(aid===id) aid=null;
+    persist();render();toast('Проект удалён');
+  });
 }
 
-// ── Часы ──
-function renderHoursSection(p){
-  const entries=D.hours.filter(h=>h.projectId===p.id).sort((a,b)=>C.cmpMonth(b.month,a.month)||String(b.createdAt||'').localeCompare(String(a.createdAt||'')));
-  const ed=editEntryId?D.hours.find(h=>h.id===editEntryId):null;
-  const kind=ed?ed.kind:'dev';
-  const rows=entries.map(h=>{
-    const auto=C.autoPhase(p,h.month);
-    return `<tr class="${ed&&ed.id===h.id?'editing':''}">
-      <td class="nw">${h.month}</td>
-      <td class="r">${fh(h.hours)}</td>
-      <td class="r nw">€${fh(h.rate)}</td>
-      <td><span class="kind-b k-${h.kind}">${h.kind==='cost'?'себест.':'разраб.'}</span></td>
-      <td><span class="phase-b ph-${h.phase}" title="${h.phaseManual?'Проставлено вручную':'Автоматически'}">${h.phase==='support'?'поддержка':'разработка'}${h.phaseManual&&h.phase!==auto?' ✋':''}</span></td>
-      <td class="note-cell">${h.note?escH(h.note):(h.migrated?'<span class="muted">из старых данных</span>':'<span class="warn-txt">нет описания</span>')}</td>
-      <td class="r nw">$${fmt2(r2(C.entryCostUSD(D,h)))}</td>
-      <td class="acts nw"><button class="ib" title="Изменить" onclick="editEntry('${h.id}')">✎</button><button class="ib ib-del" title="Удалить" onclick="delEntry('${h.id}')">✕</button></td>
-    </tr>`;
-  }).join('');
-  $('dsec-hours').innerHTML=`
-    <div class="dsec-h"><span>⏱ Часы <span class="muted">${entries.length} записей</span></span></div>
-    <div class="dform">
-      <select class="fi fi-sm" id="he-month">${monthOptions(ed?ed.month:lastMonth())}</select>
-      <input class="fi fi-sm" id="he-hours" type="number" min="0" step="0.25" placeholder="часы" value="${ed?ed.hours:''}" style="width:80px">
-      <select class="fi fi-sm" id="he-kind" onchange="$('he-rate').value=C.defaultRate(D,this.value)">
-        <option value="dev"${kind==='dev'?' selected':''}>разработка</option><option value="cost"${kind==='cost'?' selected':''}>себестоимость</option></select>
-      <span class="fl">€/ч</span><input class="fi fi-sm" id="he-rate" type="number" min="0" step="0.5" value="${ed?ed.rate:C.defaultRate(D,kind)}" style="width:70px">
-      <select class="fi fi-sm" id="he-phase">
-        <option value="auto"${!ed||!ed.phaseManual?' selected':''}>фаза: авто</option>
-        <option value="build"${ed&&ed.phaseManual&&ed.phase==='build'?' selected':''}>разработка</option>
-        <option value="support"${ed&&ed.phaseManual&&ed.phase==='support'?' selected':''}>поддержка</option></select>
-      <input class="fi fi-sm" id="he-note" placeholder="что делали" value="${ed?escH(ed.note):''}" style="flex:1;min-width:160px" onkeydown="if(event.key==='Enter')saveEntry()">
-      <button class="btn btn-teal btn-sm" onclick="saveEntry()">${ed?'Сохранить':'+ Добавить'}</button>
-      ${ed?'<button class="btn btn-sm" onclick="editEntryId=null;renderDet()">Отмена</button>':''}
+// ── часы ──
+function openHours(projectId,entryId){
+  if(readOnly||!D){toast('Только чтение');return;}
+  const e=entryId?D.hours.find(h=>h.id===entryId):null;
+  const p=projectId?proj(projectId):null;
+  M={kind:'hours',projectId:p?p.id:'',entryId:e?e.id:null};
+  const kind=e?e.kind:'dev';
+  const projSel=p?'':fld('Проект *',`<select id="m-proj" onchange="M.projectId=this.value;hoursPreview()"><option value="">— выбери проект —</option>${[...D.projects].sort((a,b)=>a.site.localeCompare(b.site)).map(x=>`<option value="${x.id}">${escH(x.site)} · ${escH(clientName(x))}</option>`).join('')}</select>`,'w100');
+  openModal(mHead(e?'Изменить запись часов':'Внести часы',p?escH(p.site)+' · '+escH(clientName(p)):'')+`
+    <div class="fgrid">
+      ${projSel}
+      ${fld('Месяц',`<select id="m-month" onchange="hoursPreview()">${monthOptions(e?e.month:defaultMonth())}</select>`,'w180')}
+      ${fld('Часы',`<input id="m-hours" inputmode="decimal" placeholder="0" value="${e?e.hours:''}" oninput="hoursPreview()"${p?' autofocus':''}>`,'w120')}
+      ${fld('Вид',`<select id="m-kind" onchange="$('m-rate').value=C.defaultRate(D,this.value);hoursPreview()"><option value="dev"${kind==='dev'?' selected':''}>разработка</option><option value="cost"${kind==='cost'?' selected':''}>себестоимость</option></select>`,'w180')}
+      ${fld('Ставка, €/ч',`<input id="m-rate" type="number" min="0" step="0.5" value="${e?e.rate:C.defaultRate(D,kind)}" oninput="hoursPreview()">`,'w120')}
+      ${fld('Фаза',`<select id="m-phase" onchange="hoursPreview()"><option value="auto"${!e||!e.phaseManual?' selected':''}>авто — по месяцу сдачи</option><option value="build"${e&&e.phaseManual&&e.phase==='build'?' selected':''}>разработка</option><option value="support"${e&&e.phaseManual&&e.phase==='support'?' selected':''}>поддержка</option></select>`,'w180')}
+      ${fld('Что делали',`<input id="m-hnote" placeholder="что делали" value="${e?escH(e.note):''}" onkeydown="if(event.key==='Enter')saveHours()">`,'w100')}
     </div>
-    ${entries.length?`<div class="tw"><table class="mtbl dtbl"><thead><tr><th>Месяц</th><th class="r">Часы</th><th class="r">Ставка</th><th>Вид</th><th>Фаза</th><th>Что делали</th><th class="r">Расход</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`:'<div class="empty-sec">Часов пока нет</div>'}`;
+    <p class="m-note" id="m-preview"></p>
+    ${mFoot(e?'Сохранить':'Добавить','saveHours()')}`);
+  hoursPreview();
 }
-function editEntry(id){editEntryId=id;renderDet();setTimeout(()=>$('he-hours')&&$('he-hours').focus(),20);}
-function saveEntry(){
-  const p=proj(aid);if(!p)return;
-  const hours=evalAmount($('he-hours').value);
-  if(hours===null||hours<0){toast('Укажи часы');$('he-hours').focus();return;}
-  const month=$('he-month').value, kind=$('he-kind').value, rate=n($('he-rate').value)||C.defaultRate(D,kind);
-  const ph=$('he-phase').value, note=$('he-note').value.trim();
-  let e=editEntryId?D.hours.find(h=>h.id===editEntryId):null;
+function hoursPreview(){
+  const h=evalAmount($('m-hours').value)||0, rate=n($('m-rate').value), month=$('m-month').value;
+  const p=M.projectId?proj(M.projectId):null;
+  const ph=$('m-phase').value==='auto'?(p?C.autoPhase(p,month):null):$('m-phase').value;
+  $('m-preview').innerHTML=`Расход по записи: <b>${usd2(r2(h*rate*C.monthRate(D,month)))}</b> <span class="muted">— ${hrs(h)} ч × €${num(rate)} × курс ${num(C.monthRate(D,month))}${ph?` · фаза: ${ph==='support'?'поддержка':'разработка'}`:''}</span>`;
+}
+function saveHours(){
+  const p=proj(M.projectId);
+  if(!p) return mErr('Выбери проект');
+  const hours=evalAmount($('m-hours').value);
+  if(hours===null||hours<0) return mErr('Укажи часы');
+  const month=$('m-month').value, kind=$('m-kind').value, rate=n($('m-rate').value)||C.defaultRate(D,kind);
+  const ph=$('m-phase').value, note=$('m-hnote').value.trim();
+  let e=M.entryId?D.hours.find(h=>h.id===M.entryId):null;
   if(!e){e={id:'h'+C.uid(),projectId:p.id,createdAt:new Date().toISOString()};D.hours.push(e);}
   Object.assign(e,{month,hours:r2(hours),kind,rate,note,phaseManual:ph!=='auto'});
   e.phase=ph==='auto'?C.autoPhase(p,month):ph;
   delete e.migrated;
   if(!(e.hours>0)) D.hours=D.hours.filter(h=>h.id!==e.id);
-  editEntryId=null;persist();render();
-  if(!note) toast('Запись без описания — попадёт в «Проверку»');
+  closeM();persist();
+  if(currentTab==='projects'){aid=p.id;} render();
+  toast(note?'Часы записаны':'Записано без описания — попадёт в «Проверку»');
 }
 function delEntry(id){
   const e=D.hours.find(h=>h.id===id);if(!e)return;
-  if(!confirm(`Удалить запись ${e.hours} ч за ${e.month}${e.note?' — '+e.note:''}?`)) return;
-  D.hours=D.hours.filter(h=>h.id!==id);editEntryId=null;persist();render();
+  confirmBox('Удалить запись часов?',`${hrs(e.hours)} ч за ${e.month}${e.note?' — '+escH(e.note):''}`,'Удалить',()=>{
+    D.hours=D.hours.filter(h=>h.id!==id);persist();render();
+  });
 }
 
-// ── Счета ──
-function invoicePaid(inv){return D.payments.filter(x=>x.invoiceId===inv.id).reduce((s,x)=>s+n(x.amount),0);}
-function renderInvoicesSection(p){
-  const invs=D.invoices.filter(i=>i.projectId===p.id).sort((a,b)=>String(b.issuedAt).localeCompare(String(a.issuedAt)));
-  const rows=invs.map(i=>{
-    const usd=C.invoiceUSD(D,i), paid=invoicePaid(i), left=i.status==='sent'?Math.max(0,usd-paid):0;
-    const age=i.status==='sent'?C.daysBetween(i.issuedAt):null;
-    return `<tr class="${i.status==='cancelled'?'zero':''}">
-      <td class="nw">${i.issuedAt||dash}${age!==null?`<div class="sub-r ${age>C.OVERDUE_DAYS?'warn-txt':''}">${age} дн.</div>`:''}</td>
-      <td class="note-cell">${escH(i.description)||dash}</td>
-      <td class="r nw">${i.currency==='EUR'?'€'+fmt2(i.amount)+`<div class="sub-r">≈ $${fmt(usd)}</div>`:'$'+fmt2(i.amount)}</td>
-      <td class="r nw">${paid?'$'+fmt2(r2(paid)):dash}</td>
-      <td class="r nw ${left>0?'debt':''}">${left>0?'$'+fmt2(r2(left)):dash}</td>
-      <td><select class="fi fi-xs inv-st inv-${i.status}" onchange="setInvoiceStatus('${i.id}',this.value)">${C.INVOICE_STATUSES.map(st=>`<option value="${st}"${st===i.status?' selected':''}>${INV_ST[st]}</option>`).join('')}</select></td>
-    </tr>`;
-  }).join('');
-  $('dsec-invoices').innerHTML=`
-    <div class="dsec-h"><span>🧾 Счета <span class="muted">выставлено $${fmt(stats(p).invoiced)}</span></span></div>
-    <div class="dform">
-      <input class="fi fi-sm" id="iv-amt" placeholder="сумма" style="width:110px" onkeydown="if(event.key==='Enter')addInvoice()">
-      <select class="fi fi-sm" id="iv-cur"><option>USD</option><option>EUR</option></select>
-      <input class="fi fi-sm" id="iv-date" type="date" value="${C.todayISO()}">
-      <input class="fi fi-sm" id="iv-desc" placeholder="за что (разработка, поддержка октябрь…)" style="flex:1;min-width:160px" onkeydown="if(event.key==='Enter')addInvoice()">
-      <select class="fi fi-sm" id="iv-st"><option value="sent">отправлен</option><option value="draft">черновик</option><option value="paid">уже оплачен</option></select>
-      <button class="btn btn-teal btn-sm" onclick="addInvoice()">+ Счёт</button>
+// ── счета ──
+function openInvoice(projectId){
+  const p=proj(projectId);if(!p)return;
+  M={kind:'invoice',projectId};
+  openModal(mHead('Выставить счёт',escH(p.site)+' · '+escH(clientName(p)))+`
+    <div class="fgrid">
+      ${fld('Сумма',`<input id="m-iamt" placeholder="0 или 1000+500" autofocus>`,'w180')}
+      ${fld('Валюта',`<select id="m-icur"><option>USD</option><option>EUR</option></select>`,'w120')}
+      ${fld('Дата счёта',`<input id="m-idate" type="date" value="${C.todayISO()}">`,'w180')}
+      ${fld('За что',`<input id="m-idesc" placeholder="разработка, поддержка за месяц…" onkeydown="if(event.key==='Enter')saveInvoice()">`,'w100')}
+      ${fld('Статус',`<select id="m-ist"><option value="sent">ждём оплату</option><option value="draft">черновик</option><option value="paid">уже оплачен</option></select>`)}
     </div>
-    ${invs.length?`<div class="tw"><table class="mtbl dtbl"><thead><tr><th>Дата</th><th>За что</th><th class="r">Сумма</th><th class="r">Оплачено</th><th class="r">Остаток</th><th>Статус</th></tr></thead><tbody>${rows}</tbody></table></div>`:'<div class="empty-sec">Счетов нет</div>'}`;
+    <p class="info">Счёт в евро пересчитывается в доллары по курсу месяца выставления.</p>
+    ${mFoot('Добавить счёт','saveInvoice()')}`);
 }
-function addInvoice(){
-  const p=proj(aid);if(!p)return;
-  const amt=evalAmount($('iv-amt').value);
-  if(!(amt>0)){toast('Укажи сумму счёта');$('iv-amt').focus();return;}
-  const date=$('iv-date').value||C.todayISO();
-  if(!D.months.some(m=>m.month===C.dateToMonth(date))){toast(`Месяца ${C.dateToMonth(date)} нет на шкале — добавь его во вкладке «По месяцам»`);return;}
-  D.invoices.push({id:'i'+C.uid(),projectId:p.id,amount:amt,currency:$('iv-cur').value,issuedAt:date,description:$('iv-desc').value.trim(),status:$('iv-st').value});
-  persist();render();toast('Счёт добавлен');
+function saveInvoice(){
+  const amt=evalAmount($('m-iamt').value);
+  if(!(amt>0)) return mErr('Укажи сумму');
+  const date=$('m-idate').value||C.todayISO();
+  if(!D.months.some(m=>m.month===C.dateToMonth(date))) return mErr(`Месяца ${C.dateToMonth(date)} нет на шкале — добавь его во вкладке «По месяцам»`);
+  D.invoices.push({id:'i'+C.uid(),projectId:M.projectId,amount:amt,currency:$('m-icur').value,issuedAt:date,description:$('m-idesc').value.trim(),status:$('m-ist').value});
+  aid=M.projectId;closeM();persist();render();toast('Счёт добавлен');
 }
 function setInvoiceStatus(id,st){
   const inv=D.invoices.find(i=>i.id===id);if(!inv)return;
-  if(st==='cancelled'&&invoicePaid(inv)>0&&!confirm('По счёту уже есть поступления. Всё равно отменить?')){renderDet();return;}
-  inv.status=st;delete inv.migrated;persist();render();
+  const apply=()=>{inv.status=st;delete inv.migrated;persist();render();};
+  if(st==='cancelled'&&invoicePaid(inv)>0){render();confirmBox('Отменить счёт?','По этому счёту уже есть поступления. Деньги останутся полученными, но счёт перестанет учитываться в выставленном.','Отменить счёт',apply);return;}
+  apply();
+}
+function delInvoice(id){
+  const inv=D.invoices.find(i=>i.id===id);if(!inv)return;
+  const linked=D.payments.filter(x=>x.invoiceId===id);
+  confirmBox('Удалить счёт?',`Счёт от ${dmy(inv.issuedAt)} на ${inv.currency==='EUR'?'€'+num(inv.amount):usd2(inv.amount)}${linked.length?`. По нему есть поступления (${linked.length}) — они останутся, но без привязки к счёту`:''}.`,'Удалить',()=>{
+    for(const x of linked) x.invoiceId='';
+    D.invoices=D.invoices.filter(i=>i.id!==id);persist();render();
+  });
 }
 
-// ── Поступления ──
-function renderPaymentsSection(p){
-  const pays=D.payments.filter(x=>x.projectId===p.id).sort((a,b)=>C.cmpMonth(b.month,a.month)||String(b.receivedAt).localeCompare(String(a.receivedAt)));
-  const invs=D.invoices.filter(i=>i.projectId===p.id);
+// ── поступления ──
+function openPayment(projectId){
+  const p=proj(projectId);if(!p)return;
+  const invs=D.invoices.filter(i=>i.projectId===p.id&&i.status!=='cancelled');
   const open=invs.filter(i=>i.status==='sent');
-  const invLabel=i=>`${i.issuedAt} · ${i.currency==='EUR'?'€':'$'}${fmt2(i.amount)}${i.description?' · '+i.description:''}`;
-  const rows=pays.map(x=>{
-    const inv=invs.find(i=>i.id===x.invoiceId);
-    return `<tr>
-      <td class="nw">${x.month||'<span class="warn-txt">нет месяца</span>'}<div class="sub-r">${x.receivedAt||''}</div></td>
-      <td class="r nw">$${fmt2(x.amount)}</td>
-      <td class="note-cell">${inv?escH(invLabel(inv)):'<span class="warn-txt">без счёта</span>'}</td>
-      <td class="note-cell">${escH(x.note)}</td>
-      <td class="acts"><button class="ib ib-del" title="Удалить" onclick="delPayment('${x.id}')">✕</button></td>
-    </tr>`;
-  }).join('');
-  $('dsec-payments').innerHTML=`
-    <div class="dsec-h"><span>💵 Поступления <span class="muted">получено $${fmt(stats(p).received)}</span></span></div>
-    <div class="dform">
-      <input class="fi fi-sm" id="pm-amt" placeholder="сумма, USDT" style="width:120px" onkeydown="if(event.key==='Enter')addPayment()">
-      <input class="fi fi-sm" id="pm-date" type="date" value="${C.todayISO()}">
-      <select class="fi fi-sm" id="pm-inv" style="max-width:280px">
-        ${open.map(i=>`<option value="${i.id}">счёт ${escH(invLabel(i))} · ост. $${fmt(Math.max(0,C.invoiceUSD(D,i)-invoicePaid(i)))}</option>`).join('')}
-        ${invs.filter(i=>i.status!=='sent'&&i.status!=='cancelled').map(i=>`<option value="${i.id}">счёт ${escH(invLabel(i))} (${INV_ST[i.status]})</option>`).join('')}
-        <option value="">без счёта</option>
-      </select>
-      <input class="fi fi-sm" id="pm-note" placeholder="заметка" style="flex:1;min-width:120px" onkeydown="if(event.key==='Enter')addPayment()">
-      <button class="btn btn-teal btn-sm" onclick="addPayment()">+ Поступление</button>
+  M={kind:'payment',projectId,invoiceId:open.length===1?open[0].id:(open[0]?open[0].id:'')};
+  openModal(mHead('Добавить поступление',escH(p.site)+' · '+escH(clientName(p)))+`
+    <div class="fgrid">
+      ${fld('Сумма, USDT',`<input id="m-pamt" placeholder="0" autofocus>`)}
+      ${fld('Дата поступления',`<input id="m-pdate" type="date" value="${C.todayISO()}">`)}
     </div>
-    ${pays.length?`<div class="tw"><table class="mtbl dtbl"><thead><tr><th>Месяц</th><th class="r">Сумма</th><th>По счёту</th><th>Заметка</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`:'<div class="empty-sec">Поступлений нет</div>'}`;
+    <div class="pick" role="group" aria-label="По какому счёту" id="m-pick"></div>
+    ${fld('Заметка',`<input id="m-pnote" placeholder="заметка" onkeydown="if(event.key==='Enter')savePayment()">`,'w100')}
+    ${mFoot('Добавить поступление','savePayment()')}`);
+  renderPick();
 }
-function addPayment(){
-  const p=proj(aid);if(!p)return;
-  const amt=evalAmount($('pm-amt').value);
-  if(!(amt>0)){toast('Укажи сумму');$('pm-amt').focus();return;}
-  const date=$('pm-date').value||C.todayISO(), month=C.dateToMonth(date);
-  if(!D.months.some(m=>m.month===month)){toast(`Месяца ${month} нет на шкале — добавь его во вкладке «По месяцам»`);return;}
-  const invId=$('pm-inv').value;
-  D.payments.push({id:'p'+C.uid(),projectId:p.id,invoiceId:invId,amount:amt,receivedAt:date,month,note:$('pm-note').value.trim()});
-  if(invId) C.syncInvoiceStatus(D,invId);
-  persist();render();toast('Поступление записано');
+function renderPick(){
+  const invs=D.invoices.filter(i=>i.projectId===M.projectId&&i.status!=='cancelled').sort((a,b)=>String(b.issuedAt).localeCompare(String(a.issuedAt)));
+  const opt=(id,label,state)=>`<button type="button" class="${M.invoiceId===id?'on':''}" aria-pressed="${M.invoiceId===id}" onclick="M.invoiceId='${id}';renderPick()"><span style="min-width:0;overflow-wrap:anywhere">${label}</span><small>${state}</small></button>`;
+  $('m-pick').innerHTML='<span style="font-size:13px;font-weight:700;color:var(--muted)">По счёту</span>'+invs.map(i=>{
+    const left=Math.max(0,C.invoiceUSD(D,i)-invoicePaid(i));
+    return opt(i.id,`${dmy(i.issuedAt)} · ${i.currency==='EUR'?'€'+num(i.amount):usd2(i.amount)}${i.description?' · '+escH(i.description):''}`,i.status==='sent'?'остаток '+usd2(r2(left)):INV_ST[i.status].toLowerCase());
+  }).join('')+opt('','Без счёта','');
+}
+function savePayment(){
+  const amt=evalAmount($('m-pamt').value);
+  if(!(amt>0)) return mErr('Укажи сумму');
+  const date=$('m-pdate').value||C.todayISO(), month=C.dateToMonth(date);
+  if(!D.months.some(m=>m.month===month)) return mErr(`Месяца ${month} нет на шкале — добавь его во вкладке «По месяцам»`);
+  D.payments.push({id:'p'+C.uid(),projectId:M.projectId,invoiceId:M.invoiceId,amount:amt,receivedAt:date,month,note:$('m-pnote').value.trim()});
+  if(M.invoiceId) C.syncInvoiceStatus(D,M.invoiceId);
+  aid=M.projectId;closeM();persist();render();toast('Поступление записано');
 }
 function delPayment(id){
   const x=D.payments.find(y=>y.id===id);if(!x)return;
-  if(!confirm(`Удалить поступление $${fmt2(x.amount)} (${x.month})?`)) return;
-  D.payments=D.payments.filter(y=>y.id!==id);
-  if(x.invoiceId) C.syncInvoiceStatus(D,x.invoiceId);
-  persist();render();
-}
-
-// ─── PROJECT MODAL ────────────────────────────────────────────
-function fillDatalists(){
-  $('dl-clients').innerHTML=D.clients.map(c=>`<option value="${escH(c.name)}">`).join('');
-  $('dl-types').innerHTML=D.types.map(c=>`<option value="${escH(c.name)}">`).join('');
-}
-function openAdd(){
-  if(readOnly){toast('Только чтение');return;}
-  eid=null;
-  $('mtitle').textContent='Новый проект';
-  for(const id of ['fs','fc','ft','fd','frefpct','fnote','finvamt']) $(id).value='';
-  if(fClient) $('fc').value=C.refName(D.clients,fClient);
-  $('forigin').value='own';$('fw').checked=false;$('fsupinc').checked=false;$('fstatus').value='Обсуждение';$('fprofitshared').value='';
-  $('fdelivery').innerHTML=monthOptions('','— не указан —');
-  $('new-invoice-block').style.display='';$('finvcur').value='USD';
-  $('ferr').textContent='';
-  $('ov').classList.add('open');
-  setTimeout(()=>$('fs').focus(),150);
-}
-function openEdit(){
-  const p=proj(aid);if(!p)return;
-  eid=p.id;
-  $('mtitle').textContent='Редактировать проект';
-  $('fs').value=p.site;$('fc').value=clientName(p);$('ft').value=typeName(p);
-  $('forigin').value=p.origin||'';$('fd').value=p.dop||'';$('frefpct').value=p.refPct||'';
-  $('fw').checked=!!p.warn;$('fsupinc').checked=!!p.supportIncluded;$('fstatus').value=p.status||'';$('fprofitshared').value=p.profitShared||'';
-  $('fnote').value=p.note||'';
-  $('fdelivery').innerHTML=monthOptions(p.deliveryMonth||'','— не указан —');
-  $('new-invoice-block').style.display='none';
-  $('ferr').textContent='';
-  $('ov').classList.add('open');
-}
-function closeM(){$('ov').classList.remove('open')}
-function ovc(e){if(e.target===$('ov'))closeM()}
-function save(){
-  const site=$('fs').value.trim(), client=$('fc').value.trim();
-  if(!site){$('ferr').textContent='Укажи домен';return}
-  if(!client){$('ferr').textContent='Укажи заказчика';return}
-  if(D.projects.some(p=>p.id!==eid&&p.site.toLowerCase()===site.toLowerCase())){$('ferr').textContent='Такой проект уже есть';return}
-  let invAmt=null;
-  if(!eid&&$('finvamt').value.trim()){
-    invAmt=evalAmount($('finvamt').value);
-    if(!(invAmt>0)){$('ferr').textContent='Некорректная сумма счёта';return}
-  }
-  let p=eid?proj(eid):null;
-  if(!p){p={id:C.uid()};D.projects.push(p);}
-  const before={d:p.deliveryMonth,o:p.origin,s:p.status};
-  Object.assign(p,{
-    site, clientId:C.ensureRef(D.clients,client), typeId:C.ensureRef(D.types,$('ft').value),
-    origin:$('forigin').value, status:$('fstatus').value, deliveryMonth:$('fdelivery').value,
-    dop:n($('fd').value), refPct:n($('frefpct').value), warn:$('fw').checked, supportIncluded:$('fsupinc').checked,
-    profitShared:$('fprofitshared').value, note:$('fnote').value.replace(/\s+$/,''),
+  confirmBox('Удалить поступление?',`${usd2(x.amount)} за ${x.month}${x.note?' — '+escH(x.note):''}`,'Удалить',()=>{
+    D.payments=D.payments.filter(y=>y.id!==id);
+    if(x.invoiceId) C.syncInvoiceStatus(D,x.invoiceId);
+    persist();render();
   });
-  if(before.d!==p.deliveryMonth||before.o!==p.origin||before.s!==p.status) C.refreshPhases(D,p.id);
-  if(invAmt) D.invoices.push({id:'i'+C.uid(),projectId:p.id,amount:invAmt,currency:$('finvcur').value,issuedAt:C.todayISO(),description:'Разработка',status:'sent'});
-  persist();closeM();aid=p.id;render();
-}
-function askDel(){
-  const p=proj(aid);if(!p)return;did=p.id;
-  const cnt=k=>D[k].filter(x=>x.projectId===p.id).length;
-  $('ctxt').textContent=`Удалить «${p.site}» вместе с часами (${cnt('hours')}), счетами (${cnt('invoices')}) и поступлениями (${cnt('payments')})? Нельзя отменить.`;
-  $('cov').classList.add('open');
-}
-function closeC(){$('cov').classList.remove('open');did=null}
-function doDel(){
-  D.projects=D.projects.filter(p=>p.id!==did);
-  for(const k of ['hours','invoices','payments']) D[k]=D[k].filter(x=>x.projectId!==did);
-  persist();closeC();closeD();render();
 }
 
-// ─── MONTHS ───────────────────────────────────────────────────
-function addMonth(){
-  const next=C.shiftMonth(lastMonth(),1);
-  D.months.push({month:next});persist();renderCurrent();toast(`Добавлен ${next} — задай ему курс`);
+// ─── ГРАФИК И ДОНАТ ───────────────────────────────────────────
+function legendHTML(){
+  return [['Получено',SERIES.rec],['Выставлено',SERIES.inv],['Расход',SERIES.exp],['Профит',SERIES.prof]].map(([l,c])=>`<span><i style="background:${c}"></i>${l}</span>`).join('');
 }
-function addPrevMonth(){
-  const prev=C.shiftMonth(D.months[0].month,-1);
-  D.months.unshift({month:prev});persist();renderCurrent();toast(`Добавлен ${prev}`);
+function niceStep(x){const p=Math.pow(10,Math.floor(Math.log10(x)));const f=x/p;return (f<=1?1:f<=2?2:f<=5?5:10)*p;}
+function kfmt(v){if(v===0)return '0';const a=Math.abs(v);const s=a>=1000?(a/1000).toLocaleString('ru-RU',{maximumFractionDigits:1})+'k':String(a);return (v<0?'−':'')+s;}
+function chartHTML(rows){
+  const nn=rows.length;if(!nn) return '<p class="info">Нет месяцев на шкале</p>';
+  const W=720,H=200;
+  const prof=r=>r.received-r.expense;
+  const vals=rows.flatMap(r=>[r.received,r.invoiced,r.expense,prof(r)]);
+  const hi=Math.max(0,...vals), lo=Math.min(0,...vals);
+  const step=niceStep((hi-lo)/4||1), top=Math.ceil(hi/step)*step||step, bot=Math.floor(lo/step)*step;
+  const y=v=>(top-v)/(top-bot)*H, x=i=>(i+.5)*W/nn;
+  const curve=f=>{const p=rows.map((r,i)=>[x(i),y(f(r))]);let s=`M${p[0][0].toFixed(1)} ${p[0][1].toFixed(1)}`;for(let i=1;i<nn;i++){const m=((p[i-1][0]+p[i][0])/2).toFixed(1);s+=`C${m} ${p[i-1][1].toFixed(1)} ${m} ${p[i][1].toFixed(1)} ${p[i][0].toFixed(1)} ${p[i][1].toFixed(1)}`;}return s;};
+  const area=f=>curve(f)+`L${x(nn-1).toFixed(1)} ${y(0).toFixed(1)}L${x(0).toFixed(1)} ${y(0).toFixed(1)}Z`;
+  const ticks=[];for(let v=top;v>=bot-1e-9;v-=step) ticks.push(v);
+  const every=Math.max(1,Math.ceil(nn/7));
+  const cols=rows.map((r,i)=>{
+    const tip=i<nn/2?'left:75%':'right:75%';
+    return `<button class="ch-col" aria-label="${r.month}: получено ${usd(r.received)}, выставлено ${usd(r.invoiced)}, расход ${usd(r.expense)}, профит ${usd(prof(r))}">
+      <span class="ch-dot" style="top:${(y(prof(r))-5).toFixed(1)}px"></span>
+      <span class="ch-tip" style="${tip}"><strong style="font-size:14px">${r.month}</strong>
+        <span><i style="background:${SERIES.rec}"></i>Получено: ${usd(r.received)}</span>
+        <span><i style="background:${SERIES.inv}"></i>Выставлено: ${usd(r.invoiced)}</span>
+        <span><i style="background:${SERIES.exp};outline:1.5px solid #fff"></i>Расход: ${usd(r.expense)}</span>
+        <span><i style="background:${SERIES.prof};height:4px;border-radius:2px"></i>Профит: ${usd(prof(r))}</span>
+        <span style="color:#D9DCE1">Курс: ${num(r.eurRate)}${r.ownRate?'':' (общий)'}</span></span>
+    </button>`;}).join('');
+  return `<div class="chart">
+    <div class="ch-y" aria-hidden="true">${ticks.map(v=>`<span>${kfmt(v)}</span>`).join('')}</div>
+    <div class="ch-body"><div class="ch-plot">
+      <svg role="img" aria-label="Получено, выставлено, расход и профит по месяцам" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
+        ${ticks.map(v=>`<path d="M0 ${y(v).toFixed(1)}H${W}" stroke="${v===0?'#9DB0BB':'#ECEDF0'}" stroke-width="1" vector-effect="non-scaling-stroke"/>`).join('')}
+        <path d="${area(r=>r.received)}" fill="${SERIES.rec}" fill-opacity=".24"/>
+        <path d="${area(r=>r.expense)}" fill="${SERIES.exp}" fill-opacity=".10"/>
+        <path d="${curve(r=>r.invoiced)}" fill="none" stroke="${SERIES.inv}" stroke-width="2" stroke-dasharray="5 4" vector-effect="non-scaling-stroke"/>
+        <path d="${curve(r=>r.received)}" fill="none" stroke="${SERIES.rec}" stroke-width="2.5" vector-effect="non-scaling-stroke"/>
+        <path d="${curve(r=>r.expense)}" fill="none" stroke="${SERIES.exp}" stroke-width="2" vector-effect="non-scaling-stroke"/>
+        <path d="${curve(prof)}" fill="none" stroke="${SERIES.prof}" stroke-width="3" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
+      </svg>
+      <div class="ch-cols" style="grid-template-columns:repeat(${nn},minmax(0,1fr))">${cols}</div>
+    </div>
+    <div class="ch-x" aria-hidden="true" style="grid-template-columns:repeat(${nn},minmax(0,1fr))">${rows.map((r,i)=>`<span>${i%every===0?r.month:''}</span>`).join('')}</div></div>
+  </div>`;
 }
+function donutHTML(projects,withSums,opt){
+  const by={};let total=0;
+  for(const p of projects){const v=stats(p,opt).received;by[p.clientId]=(by[p.clientId]||0)+v;total+=v;}
+  if(total<=0) return '<p class="info">Поступлений нет</p>';
+  const sorted=Object.entries(by).filter(([,v])=>v>0).sort((a,b)=>b[1]-a[1]);
+  const topN=withSums?5:3;
+  const parts=sorted.slice(0,topN).map(([id,v])=>[C.refName(D.clients,id)||'—',v]);
+  const rest=sorted.slice(topN).reduce((s,[,v])=>s+v,0);
+  if(rest>0) parts.push(['Остальные',rest]);
+  const Cc=2*Math.PI*56;let acc=0;
+  const segs=parts.map(([nm,v],i)=>{const len=v/total*Cc;const s=`<circle cx="75" cy="75" r="56" fill="none" stroke="${DONUT[i%DONUT.length]}" stroke-width="26" stroke-dasharray="${len.toFixed(2)} ${(Cc-len).toFixed(2)}" stroke-dashoffset="${(-acc).toFixed(2)}"/>`;acc+=len;return s;}).join('');
+  return `<div class="donut"><div class="donut-c"><svg role="img" aria-label="Доля заказчиков в полученных деньгах" width="150" height="150" viewBox="0 0 150 150">${segs}</svg><span>Получено</span></div>
+    <div class="donut-l">${parts.map(([nm,v],i)=>`<div><i style="background:${DONUT[i%DONUT.length]}"></i><span class="nm">${escH(nm)}</span>${withSums?`<span class="muted">${usd(v)}</span>`:''}<b>${Math.round(v/total*100)}%</b></div>`).join('')}</div></div>`;
+}
+
+// ─── ПО МЕСЯЦАМ ───────────────────────────────────────────────
+function renderMonthly(){
+  $('mf-reset').hidden=!excludedProjects.size;
+  const rows=C.monthlyStats(D,{exclude:excludedProjects});
+  $('legend-m').innerHTML=legendHTML();
+  $('chart-monthly').innerHTML=chartHTML(rows);
+  const delay=parseInt(D.settings.expDelay,10)||0;
+  $('monthly-info').textContent='Получено — по месяцу поступления · Выставлено — по дате счёта · Расход — часы × ставка записи × курс месяца'+(delay?` (сдвинут на +${delay} мес.)`:'')+' · Профит — получено минус расход. Курс можно поправить прямо в таблице; пустое поле — общий курс. Нажми на проект в строке, чтобы исключить его из расчёта.';
+  const T={inv:0,rec:0,exp:0};
+  $('monthly-table').innerHTML=`<thead><tr><th>Месяц</th><th>Курс $/€</th><th>Выставлено</th><th>Получено</th><th>Расход</th><th>Профит</th><th>Маржа</th><th class="l" style="min-width:260px">Проекты</th></tr></thead><tbody>`+rows.map(r=>{
+    T.inv+=r.invoiced;T.rec+=r.received;T.exp+=r.expense;
+    const any=r.received||r.expense;
+    const tags=r.allProjects.map(id=>{const p=proj(id);if(!p)return '';const off=excludedProjects.has(id);return `<button class="ptag${off?' off':''}" aria-pressed="${off}" onclick="toggleMonthlyProject('${id}')" title="${off?'Включить':'Исключить'}: ${escH(p.site)}">${escH(p.site)}</button>`;}).join('');
+    return `<tr>
+      <td style="font-weight:800" class="nw">${r.month}</td>
+      <td><input class="rate-in${r.ownRate?'':' def'}" value="${r.ownRate?r.eurRate:''}" placeholder="${D.settings.eurRate}" aria-label="Курс ${r.month}" title="${r.ownRate?'Курс месяца':'Не задан — берётся общий'}" onchange="setMonthRate('${r.month}',this.value)"></td>
+      <td>${r.invoiced?usd(r.invoiced):dash}</td>
+      <td style="font-weight:700">${r.received?usd(r.received):dash}</td>
+      <td>${r.expense?usd(r.expense):dash}${r.expense?`<small>разр. ${usd(r.build.expense)} · подд. ${usd(r.support.expense)}</small>`:''}</td>
+      <td style="font-weight:800" class="${any?(r.profit>=0?'pos':'neg'):''}">${any?usd(r.profit):dash}${r.invoiced&&Math.round(r.invoiced)!==Math.round(r.received)?`<small>ожид. ${usd(r.expectedProfit)}</small>`:''}</td>
+      <td>${r.received>0?pct(r.profit,r.received):dash}</td>
+      <td class="l">${tags}</td>
+    </tr>`;
+  }).join('')+`<tr class="total"><td>Итого</td><td></td><td>${usd(T.inv)}</td><td>${usd(T.rec)}</td><td>${usd(T.exp)}</td><td class="${T.rec-T.exp>=0?'pos':'neg'}">${usd(T.rec-T.exp)}</td><td>${pct(T.rec-T.exp,T.rec)}</td><td></td></tr></tbody>`;
+}
+function toggleMonthlyProject(id){excludedProjects.has(id)?excludedProjects.delete(id):excludedProjects.add(id);renderMonthly();}
+function resetMonthlyFilter(){excludedProjects.clear();renderMonthly();}
+function addMonth(){const m=C.shiftMonth(lastMonth(),1);D.months.push({month:m});persist();renderCurrent();toast(`Добавлен ${m} — задай ему курс`);}
+function addPrevMonth(){const m=C.shiftMonth(D.months[0].month,-1);D.months.unshift({month:m});persist();renderCurrent();toast(`Добавлен ${m}`);}
 function setMonthRate(month,val){
   const m=D.months.find(x=>x.month===month);if(!m)return;
   const v=parseFloat(String(val).replace(',','.'));
@@ -611,170 +729,107 @@ function setMonthRate(month,val){
   persist();renderCurrent();
 }
 
-// ─── TABS ─────────────────────────────────────────────────────
-let monthlyChart=null;
-function switchTab(tab){
-  currentTab=tab;
-  for(const t of ['projects','monthly','clients','receivables','issues']){
-    $('view-'+t).classList.toggle('on',t===tab);
-    $('tab-'+t).classList.toggle('on',t===tab);
-  }
-  renderCurrent();
-}
-
-// ─── MONTHLY ──────────────────────────────────────────────────
-function renderMonthly(){
-  $('mf-reset-btn').style.display=excludedProjects.size?'inline-block':'none';
-  const rows=C.monthlyStats(D,{exclude:excludedProjects});
-  const delay=parseInt(D.settings.expDelay,10)||0;
-  $('chart-sub').textContent='Получено — по месяцу поступления · Выставлено — по дате счёта · Расход — часы × ставка записи × курс месяца'+(delay?` · расход сдвинут на +${delay} мес.`:'')+' · Профит — получено минус расход';
-  const ctx=$('monthly-chart').getContext('2d');
-  if(monthlyChart) monthlyChart.destroy();
-  monthlyChart=new Chart(ctx,{
-    type:'bar',
-    data:{labels:rows.map(r=>r.month),datasets:[
-      {label:'Получено',data:rows.map(r=>Math.round(r.received)),backgroundColor:'rgba(15,196,122,.75)',borderColor:'#0FC47A',borderWidth:1.5,borderRadius:6,borderSkipped:false},
-      {label:'Выставлено',data:rows.map(r=>Math.round(r.invoiced)),backgroundColor:'rgba(46,134,193,.12)',borderColor:'#2E86C1',borderWidth:1.5,borderRadius:6,borderSkipped:false},
-      {label:'Расход',data:rows.map(r=>Math.round(r.expense)),backgroundColor:'rgba(240,82,82,.65)',borderColor:'#F05252',borderWidth:1.5,borderRadius:6,borderSkipped:false},
-      {label:'Профит',data:rows.map(r=>Math.round(r.received)-Math.round(r.expense)),type:'line',borderColor:'#1A2B3C',borderWidth:2.5,pointBackgroundColor:'#1A2B3C',pointRadius:3,tension:.35,fill:false},
-    ]},
-    options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},
-      plugins:{legend:{position:'top',labels:{font:{family:'Nunito',weight:'700',size:12},usePointStyle:true,padding:16}},
-        tooltip:{backgroundColor:'#1A2B3C',titleFont:{family:'Nunito',weight:'700'},bodyFont:{family:'Nunito'},padding:12,callbacks:{label:c=>` ${c.dataset.label}: $${c.parsed.y.toLocaleString('ru-RU')}`}}},
-      scales:{x:{grid:{color:'#DFF0EF'},ticks:{font:{family:'Nunito',weight:'700',size:11}}},y:{grid:{color:'#DFF0EF'},ticks:{font:{family:'Nunito',size:11},callback:v=>'$'+v.toLocaleString('ru-RU')}}}}
-  });
-  const T={invoiced:0,received:0,expense:0};
-  $('monthly-tbody').innerHTML=rows.map(r=>{
-    T.invoiced+=r.invoiced;T.received+=r.received;T.expense+=r.expense;
-    const any=r.received||r.expense;
-    const tags=r.allProjects.map(id=>{const p=proj(id);if(!p)return '';const off=excludedProjects.has(id);
-      return `<span class="proj-tag${off?' off':''}" onclick="toggleMonthlyProject('${id}')" title="${off?'Включить':'Отключить'}: ${escH(p.site)}"><span class="pt-dot"></span>${escH(p.site)}</span>`;}).join('');
-    const split=r.expense?`<div class="sub-r">разр. $${fmt(r.build.expense)} · подд. $${fmt(r.support.expense)}</div>`:'';
-    return `<tr>
-      <td style="font-weight:800" class="nw">${r.month}</td>
-      <td class="r"><input class="rate-in${r.ownRate?'':' rate-def'}" value="${r.ownRate?r.eurRate:''}" placeholder="${D.settings.eurRate}" title="${r.ownRate?'Курс месяца':'Курс не задан — берётся общий'}" onchange="setMonthRate('${r.month}',this.value)"></td>
-      <td class="r">${money(r.invoiced)}</td>
-      <td class="r">${money(r.received)}</td>
-      <td class="r">${money(r.expense)}${split}</td>
-      <td class="r ${any?(r.profit>=0?'pos':'neg'):''}">${any?'$'+fmt(r.profit):dash}${r.invoiced!==r.received&&r.invoiced?`<div class="sub-r">ожид. $${fmt(r.expectedProfit)}</div>`:''}</td>
-      <td class="r">${r.received>0?Math.round(r.margin*10)/10+'%':dash}</td>
-      <td>${tags}</td>
-    </tr>`;
-  }).join('')+`<tr class="total-row"><td>ИТОГО</td><td></td>
-    <td class="r">$${fmt(T.invoiced)}</td><td class="r">$${fmt(T.received)}</td><td class="r">$${fmt(T.expense)}</td>
-    <td class="r ${T.received-T.expense>=0?'pos':'neg'}">$${fmt(T.received-T.expense)}</td>
-    <td class="r">${T.received>0?Math.round((T.received-T.expense)/T.received*1000)/10+'%':''}</td><td></td></tr>`;
-  const noRate=D.months.filter(m=>!(n(m.eurRate)>0)).map(m=>m.month);
-  const note=$('no-deliv-note');
-  note.style.display=noRate.length?'block':'none';
-  note.innerHTML=noRate.length?`⚠ Нет своего курса: ${noRate.join(', ')} — для расходов берётся общий ${D.settings.eurRate}. Впиши курс в колонку «Курс $/€».`:'';
-}
-function toggleMonthlyProject(id){excludedProjects.has(id)?excludedProjects.delete(id):excludedProjects.add(id);renderMonthly();}
-function resetMonthlyFilter(){excludedProjects.clear();renderMonthly();}
-
-// ─── CLIENTS ──────────────────────────────────────────────────
+// ─── ЗАКАЗЧИКИ ────────────────────────────────────────────────
 function renderClients(){
-  const fromSel=$('cs-from'),toSel=$('cs-to');
-  const fv=fromSel.value,tv=toSel.value;
-  fromSel.innerHTML=monthOptions(fv,'с начала');toSel.innerHTML=monthOptions(tv,'по сегодня');
-  const from=fromSel.value||undefined,to=toSel.value||undefined;
+  const fs=$('cs-from'),ts=$('cs-to'),fv=fs.value,tv=ts.value;
+  fs.innerHTML=monthOptions(fv,'с начала');ts.innerHTML=monthOptions(tv,'по сегодня');
+  const from=fs.value||undefined,to=ts.value||undefined;
   const s=C.clientSummary(D,{from,to});
-  const row=r=>`<tr class="${r.clientId!==undefined?'click-row':''}" ${r.clientId?`onclick="setC('${r.clientId}')"`:''}>
-    <td style="font-weight:800">${escH(r.client)}</td>
-    <td class="r">${r.projects}</td>
-    <td class="r">${fh(r.hours)}<div class="sub-r">разр. ${fh(r.build.hours)} · подд. ${fh(r.support.hours)}</div></td>
-    <td class="r">$${fmt(r.expense)}<div class="sub-r">разр. $${fmt(r.build.expense)} · подд. $${fmt(r.support.expense)}</div></td>
-    <td class="r">${money(r.invoiced)}</td>
-    <td class="r">${money(r.received)}</td>
-    <td class="r ${r.debt>0?'debt':''}">${r.debt>0?'$'+fmt(r.debt):dash}</td>
-    <td class="r ${r.profit>=0?'pos':'neg'}">$${fmt(r.profit)}</td>
-    <td class="r">${r.received>0?r.margin+'%':dash}</td>
-  </tr>`;
-  const table=(title,sub,rows,total)=>`<div class="panel"><div class="ph"><span class="ph-title">${title}</span><span class="muted" style="font-size:11px;font-weight:700">${sub}</span></div>
-    <div class="tw"><table><thead><tr><th>Заказчик</th><th class="r">Проектов</th><th class="r">Часы</th><th class="r">Расход</th><th class="r">Выставлено</th><th class="r">Получено</th><th class="r">Долг</th><th class="r">Профит</th><th class="r">Маржа</th></tr></thead>
-    <tbody>${rows.length?rows.map(row).join('')+`<tr class="total-row">${row(total).replace(/^<tr[^>]*>/,'').replace(/<\/tr>$/,'')}</tr>`:'<tr><td colspan="9" class="empty-row">Нет данных за период</td></tr>'}</tbody></table></div></div>`;
+  const row=(r,total)=>`<tr class="${total?'total':''}">
+    <td>${total?'Итого':`<button class="link" onclick="setClientFilter('${r.clientId}')">${escH(r.client)}</button>`}</td>
+    <td>${r.projects}</td>
+    <td>${hrs(r.hours)}<small>разр. ${hrs(r.build.hours)} · подд. ${hrs(r.support.hours)}</small></td>
+    <td>${usd(r.expense)}<small>разр. ${usd(r.build.expense)} · подд. ${usd(r.support.expense)}</small></td>
+    <td>${r.invoiced?usd(r.invoiced):dash}</td>
+    <td>${r.received?usd(r.received):dash}</td>
+    <td class="${r.debt>0?'debt':''}" style="${r.debt>0?'font-weight:800':'color:var(--muted)'}">${r.debt>0?usd(r.debt):dash}</td>
+    <td style="font-weight:800" class="${r.profit>=0?'pos':'neg'}">${usd(r.profit)}</td>
+    <td>${r.received>0?pct(r.profit,r.received):dash}</td></tr>`;
+  const table=(title,sub,rows,total)=>`<section class="card"><div class="card-h"><h2>${title}</h2><span class="card-sub">${sub}</span></div>
+    <div class="tw"><table class="tbl" style="min-width:900px"><thead><tr><th>Заказчик</th><th>Проектов</th><th>Часы</th><th>Расход</th><th>Выставлено</th><th>Получено</th><th>Долг</th><th>Профит</th><th>Маржа</th></tr></thead>
+    <tbody>${rows.length?rows.map(r=>row(r)).join('')+row(total,true):'<tr><td colspan="9" class="l muted" style="text-align:center;padding:18px">Нет данных за период</td></tr>'}</tbody></table></div></section>`;
   $('clients-body').innerHTML=
-    (from||to?`<div class="info-note">Период ${from||'…'} — ${to||'…'}: часы и расход — по месяцу работы, выставлено — по дате счёта, получено — по месяцу поступления. Допрасходы без даты в периоде не учитываются; долг — на сегодня.</div>`:'')+
+    (from||to?`<div class="info-box">За период ${from||'…'} — ${to||'…'}: часы и расход — по месяцу работы, выставлено — по дате счёта, получено — по месяцу поступления. Допрасходы без даты в периоде не учитываются; долг — на сегодня.</div>`:'')+
+    `<section class="card"><div class="card-h"><h2>Доля заказчиков</h2><span class="card-sub">в полученных деньгах${from||to?' за период':' за всё время'}</span></div>${donutHTML(D.projects,true,{from,to})}</section>`+
     table('Свои проекты','строили сами — фикс-прайс + поддержка',s.own,s.totalOwn)+
     (s.inherited.length?table('Чужие проекты на поддержке','без стартового дохода — маржу не сравнивать со своими',s.inherited,s.totalInherited):'');
 }
 
-// ─── RECEIVABLES ──────────────────────────────────────────────
+// ─── ДЕБИТОРКА ────────────────────────────────────────────────
 function renderReceivables(){
   const list=C.receivables(D);
   const total=list.reduce((s,r)=>s+r.outstanding,0);
-  const by={};for(const r of list) by[r.client||'—']=(by[r.client||'—']||0)+r.outstanding;
-  $('recv-body').innerHTML=`
-    <div class="cards" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr))">
-      <div class="sc c4"><div class="sc-ico">💸</div><div class="sc-lbl">Всего должны</div><div class="sc-val v-yel">$${fmt(total)}</div><div class="sc-sub">${list.length} счетов</div></div>
-      ${Object.entries(by).sort((a,b)=>b[1]-a[1]).map(([c,v])=>`<div class="sc"><div class="sc-lbl">${escH(c)}</div><div class="sc-val" style="font-size:22px">$${fmt(v)}</div></div>`).join('')}
+  const by={};for(const r of list){const k=r.client||'—';(by[k]||(by[k]={sum:0,n:0})).sum+=r.outstanding;by[k].n++;}
+  $('view-receivables').innerHTML=`
+    <div class="kpis">
+      <div class="kpi kpi-accent"><span class="k-l">Всего должны</span><span class="k-v">${usd(total)}</span><span class="k-s">счетов: ${list.length}</span></div>
+      ${Object.entries(by).sort((a,b)=>b[1].sum-a[1].sum).map(([c,v])=>`<div class="kpi kpi-white"><span class="k-l">${escH(c)}</span><span class="k-v">${usd(v.sum)}</span><span class="k-s">счетов: ${v.n}</span></div>`).join('')}
     </div>
-    <div class="panel"><div class="ph"><span class="ph-title">Неоплаченные счета</span><span class="muted" style="font-size:11px;font-weight:700">старые — сверху</span></div>
-    <div class="tw"><table><thead><tr><th>Заказчик</th><th>Проект</th><th>За что</th><th>Выставлен</th><th class="r">Возраст</th><th class="r">Сумма</th><th class="r">Оплачено</th><th class="r">Остаток</th></tr></thead><tbody>
-    ${list.length?list.map(r=>`<tr class="click-row" onclick="openProject('${r.projectId}')">
-      <td style="font-weight:800">${escH(r.client)}</td><td>${escH(r.site)}</td><td class="note-cell">${escH(r.description)||dash}</td>
-      <td class="nw">${r.issuedAt}</td><td class="r nw ${r.ageDays>C.OVERDUE_DAYS?'warn-txt':''}">${r.ageDays} дн.</td>
-      <td class="r nw">${r.currency==='EUR'?'€'+fmt2(r.amount):'$'+fmt2(r.amount)}</td><td class="r">${r.paid?'$'+fmt2(r.paid):dash}</td>
-      <td class="r debt">$${fmt2(r.outstanding)}</td></tr>`).join(''):'<tr><td colspan="8" class="empty-row">Никто не должен 🎉</td></tr>'}
-    </tbody></table></div></div>`;
+    <section class="card"><div class="card-h"><h2>Неоплаченные счета</h2><span class="card-sub">старые — сверху · нажми на проект, чтобы открыть его</span></div>
+    <div class="tw"><table class="tbl" style="min-width:900px"><thead><tr><th>Заказчик</th><th class="l">Проект</th><th class="l">За что</th><th class="l">Выставлен</th><th>Возраст</th><th>Сумма</th><th>Оплачено</th><th>Остаток</th></tr></thead><tbody>
+    ${list.length?list.map(r=>`<tr>
+      <td style="font-weight:800">${escH(r.client)}</td>
+      <td class="l"><button class="link" onclick="openProject('${r.projectId}','list')">${escH(r.site)}</button></td>
+      <td class="l muted" style="font-size:13px">${escH(r.description)||dash}</td>
+      <td class="l nw">${dmy(r.issuedAt)}</td>
+      <td class="nw" style="font-weight:700;color:${r.ageDays>C.OVERDUE_DAYS?'var(--red)':'inherit'}">${r.ageDays} дн.</td>
+      <td class="nw">${r.currency==='EUR'?'€'+num(r.amount)+`<small>≈ ${usd(r.amountUSD)}</small>`:usd2(r.amount)}</td>
+      <td>${r.paid?usd2(r.paid):dash}</td>
+      <td class="debt" style="font-weight:800">${usd2(r.outstanding)}</td></tr>`).join(''):'<tr><td colspan="8" class="l muted" style="text-align:center;padding:24px">Никто не должен 🎉</td></tr>'}
+    </tbody></table></div></section>`;
 }
 
-// ─── DATA ISSUES ──────────────────────────────────────────────
+// ─── ПРОВЕРКА ─────────────────────────────────────────────────
 function renderIssues(){
   const all=C.dataIssues(D);
   const groups={};for(const i of all)(groups[i.type]||(groups[i.type]=[])).push(i);
-  const order=Object.keys(ISSUE_TITLES).filter(k=>groups[k]);
-  $('issues-body').innerHTML=all.length?order.map(k=>`<div class="panel issue-grp">
-    <div class="ph"><span class="ph-title">${ISSUE_TITLES[k]}</span><span class="tab-cnt">${groups[k].length}</span></div>
-    <div class="issue-list">${groups[k].map(i=>{
-      const go=i.projectId?`openProject('${i.projectId}')`:i.month?`switchTab('monthly')`:'';
-      const extra=i.amount!==undefined?` <b class="${i.amount<0?'neg':'pos'}">$${fmt(i.amount)}</b>`:i.hours!==undefined?` <span class="muted">${fh(i.hours)} ч</span>`:'';
-      return `<div class="issue${go?' click-row':''}" ${go?`onclick="${go}"`:''}>${escH(i.title)}${extra}</div>`;
-    }).join('')}</div></div>`).join(''):'<div class="panel"><div class="empty-row" style="padding:40px;text-align:center">Проблем не найдено ✅</div></div>';
+  const order=[...Object.keys(ISSUE_TITLES).filter(k=>groups[k]),...Object.keys(groups).filter(k=>!ISSUE_TITLES[k])];
+  $('view-issues').innerHTML=all.length?order.map(k=>`<section class="card" style="gap:4px">
+    <div class="issue-h"><h2>${ISSUE_TITLES[k]||k}</h2><span class="cnt">${groups[k].length}</span></div>
+    ${groups[k].map(i=>{
+      const go=i.projectId?`openProject('${i.projectId}','list')`:i.month?`switchTab('monthly')`:'';
+      const extra=i.amount!==undefined?usd(i.amount)+(i.hours!==undefined?' · '+hrs(i.hours)+' ч':''):i.hours!==undefined?hrs(i.hours)+' ч':i.ageDays!==undefined?i.ageDays+' дн.':'';
+      return `<button class="issue" ${go?`onclick="${go}"`:'disabled style="cursor:default"'}><span>${escH(i.title)}</span><b>${extra}</b></button>`;
+    }).join('')}</section>`).join(''):'<p class="empty">Проблем не найдено ✅</p>';
 }
 
-// ─── EXPORT / IMPORT ──────────────────────────────────────────
+// ─── ЭКСПОРТ / ИМПОРТ ─────────────────────────────────────────
 function exportData(){
+  if(!D) return;
   const blob=new Blob([JSON.stringify({...D,exportedAt:new Date().toISOString()},null,2)],{type:'application/json'});
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);
-  a.download=`webdev-v2-${C.todayISO()}.json`;a.click();URL.revokeObjectURL(a.href);
+  a.download=`hexa-dashboard-${C.todayISO()}.json`;a.click();URL.revokeObjectURL(a.href);
   toast('Данные экспортированы');
 }
 function triggerImport(){$('imp-input').click()}
 function importData(e){
   const file=e.target.files[0];if(!file)return;
   const reader=new FileReader();
-  reader.onload=async ev=>{
+  reader.onload=ev=>{
     try{
       const data=JSON.parse(ev.target.result);
       if((data.schemaVersion||0)<C.SCHEMA_VERSION){toast('Это экспорт старого формата — его нужно прогнать через миграцию');return;}
-      if(!confirm(`Заменить все данные содержимым файла (${(data.projects||[]).length} проектов)?`)) return;
-      delete data.exportedAt;
-      D=C.normalize(data);readOnly=false;
-      await persist();closeD();render();toast(`Импортировано ${D.projects.length} проектов`);
+      confirmBox('Заменить все данные?',`Текущие данные будут заменены содержимым файла (${(data.projects||[]).length} проектов).`,'Заменить',async()=>{
+        delete data.exportedAt;D=C.normalize(data);readOnly=false;aid=null;
+        await persist();syncSettingsInputs();render();toast(`Импортировано ${D.projects.length} проектов`);
+      });
     }catch(err){toast('Ошибка: '+err.message);}
   };
   reader.readAsText(file);e.target.value='';
 }
 
-// ─── DRAWER / TOAST ───────────────────────────────────────────
-function openDrawer(){$('sb').classList.add('drawer-open');$('drawer-ov').classList.add('open');document.body.style.overflow='hidden';}
-function closeDrawer(){$('sb').classList.remove('drawer-open');$('drawer-ov').classList.remove('open');document.body.style.overflow='';}
+// ─── DRAWER / TOAST / EVENTS ──────────────────────────────────
+function openDrawer(){$('sb').classList.add('drawer-open');$('drawer-ov').classList.add('open');}
+function closeDrawer(){$('sb').classList.remove('drawer-open');$('drawer-ov').classList.remove('open');}
 function toast(msg){const t=$('toast');t.textContent=msg;t.classList.add('show');clearTimeout(toast._t);toast._t=setTimeout(()=>t.classList.remove('show'),2800);}
 
-// ─── EVENTS ───────────────────────────────────────────────────
-$('rate').addEventListener('input',()=>onSettingInput('rate','rate'));
-$('costrate').addEventListener('input',()=>onSettingInput('costrate','costRate'));
-$('eurrate').addEventListener('input',()=>onSettingInput('eurrate','eurRate'));
-$('expdelay').addEventListener('input',()=>onSettingInput('expdelay','expDelay',true));
+for(const [id,k] of SETTINGS) $(id).addEventListener('input',()=>onSettingInput(id,k,k==='expDelay'));
 document.addEventListener('keydown',e=>{
-  if(e.key==='Escape'){
-    if($('cov').classList.contains('open')) closeC();
-    else if($('ov').classList.contains('open')) closeM();
-    else if($('sb').classList.contains('drawer-open')) closeDrawer();
-    else if(editEntryId){editEntryId=null;renderDet();}
-    else if(aid) closeD();
-  }
+  if(e.key!=='Escape') return;
+  if($('ov').classList.contains('open')) closeM();
+  else if($('sb').classList.contains('drawer-open')) closeDrawer();
+  else if(aid&&currentTab==='projects'&&!(document.activeElement&&document.activeElement.classList.contains('pnote'))){aid=null;renderList(filtered());}
 });
-
+document.querySelectorAll('.logo-slot').forEach(el=>el.appendChild($('logo-tpl').content.cloneNode(true)));
+renderNav();
 checkAuth();
