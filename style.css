@@ -56,6 +56,7 @@ h1,h2,h3{margin:0}
 .sb-in{flex:none;display:flex;align-items:center;gap:4px;font-weight:700;white-space:nowrap}
 .sb-in input{width:60px;font-size:13px;height:30px;padding:0 6px;border:1px solid rgba(255,255,255,.18);border-radius:8px;background:rgba(255,255,255,.08);color:#fff;font-weight:800;text-align:right}
 .sb-in input:focus{outline:none;border-color:var(--accent)}
+.sb-in .unit{width:32px;font-style:normal;text-align:left}
 .sb-hint{font-size:11px;color:rgba(255,255,255,.45);font-weight:600}
 .sb-actions{margin-right:18px;display:flex;flex-direction:column;gap:8px}
 .sb-actions .row2{display:flex;gap:8px}
@@ -124,7 +125,9 @@ h1,h2,h3{margin:0}
 .legend i{width:12px;height:12px;border-radius:50%;display:inline-block}
 .chart{display:flex;gap:10px}
 .ch-y{height:200px;display:flex;flex-direction:column;justify-content:space-between;font-size:12px;line-height:1;color:var(--muted);text-align:right;margin-top:-6px;padding-bottom:0}
-.ch-body{flex:1;min-width:0;display:flex;flex-direction:column;gap:8px}
+.ch-scroll{flex:1;min-width:0}
+.ch-body{min-width:0;display:flex;flex-direction:column;gap:8px}
+.ch-x .minor{visibility:hidden}
 .ch-plot{position:relative}
 .ch-plot svg{display:block;width:100%;height:200px;overflow:visible}
 .ch-cols{position:absolute;inset:0;display:grid}
@@ -140,7 +143,7 @@ h1,h2,h3{margin:0}
 
 .donut{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:18px 40px}
 .donut-c{position:relative;width:150px;height:150px;flex:none}
-.donut-c svg{transform:rotate(-90deg)}
+
 .donut-c span{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:13px;color:var(--muted)}
 .donut-l{flex:1 1 150px;max-width:460px;display:flex;flex-direction:column;gap:8px}
 .donut-l div{display:flex;align-items:center;gap:8px;font-size:14px}
@@ -152,10 +155,10 @@ h1,h2,h3{margin:0}
 .list-head{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px}
 .list-head h2{font-size:22px;font-weight:800}
 .filters{display:flex;flex-wrap:wrap;align-items:center;gap:10px}
-.sel{position:relative;flex:1 1 140px;min-width:0;display:flex}
-.sel select{width:100%;height:46px;padding:0 40px 0 18px;border:0;border-radius:999px;background:var(--white);font-weight:700;font-size:14px;cursor:pointer;appearance:none;-webkit-appearance:none}
+.sel{position:relative;flex:1 1 auto;min-width:0;display:flex}
+.sel select{width:auto;min-width:100%;max-width:100%;height:46px;padding:0 40px 0 18px;border:0;border-radius:999px;background:var(--white);font-weight:700;font-size:14px;cursor:pointer;appearance:none;-webkit-appearance:none}
 .sel::after{content:'';position:absolute;right:18px;top:18px;width:7px;height:7px;border-right:2.4px solid var(--ink);border-bottom:2.4px solid var(--ink);transform:rotate(45deg);pointer-events:none}
-.sel.sel-fixed{flex:0 0 auto}.sel.sel-fixed select{width:150px}
+.sel.sel-fixed{flex:0 0 auto}.sel.sel-fixed select{width:auto;min-width:150px}
 .range{flex:0 1 auto;display:flex;align-items:center;gap:8px;height:46px;padding:0 16px;border-radius:999px;background:var(--white);font-size:14px;font-weight:700}
 .range span{color:var(--muted);white-space:nowrap}
 .range input{width:68px;height:34px;padding:0 8px;border:0;border-radius:10px;background:var(--soft);font-weight:700}
@@ -358,7 +361,7 @@ h1,h2,h3{margin:0}
   .r-num b{font-size:18px}
   .kpi .k-v{font-size:24px}
   .range{flex:1 1 100%}
-  .chart .ch-y{display:none}
+
   .modal{padding:20px 18px;border-radius:22px}
   .toast{left:14px;right:14px;text-align:center;border-radius:16px}
 }
@@ -369,4 +372,12 @@ h1,h2,h3{margin:0}
   .r-num,.r-mid,.r-prof{width:auto}
   .r-num b{font-size:20px}
   .xpanel{grid-column:1/-1}
+}
+
+/* график на телефоне: ~5 месяцев в окне, остальное — горизонтальный скролл */
+@media (max-width:640px){
+  .ch-scroll{overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;scrollbar-width:thin;padding-bottom:6px;scroll-snap-type:x proximity}
+  .ch-body{width:calc(var(--n) * 100% / 5);padding:0 10px}
+  .ch-x .minor{visibility:visible}
+  .ch-y{font-size:11px}
 }

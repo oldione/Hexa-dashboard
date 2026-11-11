@@ -248,7 +248,7 @@ function renderProjects(){
   renderKpis(list);
   const rows=C.monthlyStats(D);
   $('legend-p').innerHTML=legendHTML();
-  $('chart-projects').innerHTML=chartHTML(rows);
+  $('chart-projects').innerHTML=chartHTML(rows);scrollChartsToEnd();
   $('donut-projects').innerHTML=donutHTML(D.projects,false);
   $('ptitle').textContent=`${list.length===D.projects.length?'Все проекты':'Проекты'} · ${list.length}`;
   renderList(list);
@@ -663,7 +663,7 @@ function chartHTML(rows){
     </button>`;}).join('');
   return `<div class="chart">
     <div class="ch-y" aria-hidden="true">${ticks.map(v=>`<span>${kfmt(v)}</span>`).join('')}</div>
-    <div class="ch-body"><div class="ch-plot">
+    <div class="ch-scroll"><div class="ch-body" style="--n:${nn}"><div class="ch-plot">
       <svg role="img" aria-label="Получено, выставлено, расход и профит по месяцам" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
         ${ticks.map(v=>`<path d="M0 ${y(v).toFixed(1)}H${W}" stroke="${v===0?'#9DB0BB':'#ECEDF0'}" stroke-width="1" vector-effect="non-scaling-stroke"/>`).join('')}
         <path d="${area(r=>r.received)}" fill="${SERIES.rec}" fill-opacity=".24"/>
@@ -675,9 +675,11 @@ function chartHTML(rows){
       </svg>
       <div class="ch-cols" style="grid-template-columns:repeat(${nn},minmax(0,1fr))">${cols}</div>
     </div>
-    <div class="ch-x" aria-hidden="true" style="grid-template-columns:repeat(${nn},minmax(0,1fr))">${rows.map((r,i)=>`<span>${i%every===0?r.month:''}</span>`).join('')}</div></div>
+    <div class="ch-x" aria-hidden="true" style="grid-template-columns:repeat(${nn},minmax(0,1fr))">${rows.map((r,i)=>`<span${i%every===0?'':' class="minor"'}>${r.month}</span>`).join('')}</div></div></div>
   </div>`;
 }
+// На телефоне график листается по горизонтали — показываем сначала последние месяцы
+function scrollChartsToEnd(){const go=()=>document.querySelectorAll('.ch-scroll').forEach(el=>{el.scrollLeft=el.scrollWidth;});go();requestAnimationFrame(go);}
 function donutHTML(projects,withSums,opt){
   const by={};let total=0;
   for(const p of projects){const v=stats(p,opt).received;by[p.clientId]=(by[p.clientId]||0)+v;total+=v;}
@@ -687,8 +689,18 @@ function donutHTML(projects,withSums,opt){
   const parts=sorted.slice(0,topN).map(([id,v])=>[C.refName(D.clients,id)||'—',v]);
   const rest=sorted.slice(topN).reduce((s,[,v])=>s+v,0);
   if(rest>0) parts.push(['Остальные',rest]);
-  const Cc=2*Math.PI*56;let acc=0;
-  const segs=parts.map(([nm,v],i)=>{const len=v/total*Cc;const s=`<circle cx="75" cy="75" r="56" fill="none" stroke="${DONUT[i%DONUT.length]}" stroke-width="26" stroke-dasharray="${len.toFixed(2)} ${(Cc-len).toFixed(2)}" stroke-dashoffset="${(-acc).toFixed(2)}"/>`;acc+=len;return s;}).join('');
+  // Каждый сектор — отдельная дуга с явными концами (а не пунктир по кругу:
+  // у замкнутого круга на стыке Chrome рисует кривой угол).
+  const R=56,CX=75,CY=75;
+  const pt=a=>[(CX+R*Math.cos(a)).toFixed(2),(CY+R*Math.sin(a)).toFixed(2)];
+  let acc=0;
+  const segs=parts.map(([nm,v],i)=>{
+    const color=DONUT[i%DONUT.length], frac=v/total;
+    if(frac>=0.9999) return `<circle cx="${CX}" cy="${CY}" r="${R}" fill="none" stroke="${color}" stroke-width="26"/>`;
+    const a0=-Math.PI/2+acc*2*Math.PI, a1=a0+frac*2*Math.PI;acc+=frac;
+    const [x0,y0]=pt(a0),[x1,y1]=pt(a1);
+    return `<path d="M${x0} ${y0}A${R} ${R} 0 ${frac>0.5?1:0} 1 ${x1} ${y1}" fill="none" stroke="${color}" stroke-width="26"/>`;
+  }).join('');
   return `<div class="donut"><div class="donut-c"><svg role="img" aria-label="Доля заказчиков в полученных деньгах" width="150" height="150" viewBox="0 0 150 150">${segs}</svg><span>Получено</span></div>
     <div class="donut-l">${parts.map(([nm,v],i)=>`<div><i style="background:${DONUT[i%DONUT.length]}"></i><span class="nm">${escH(nm)}</span>${withSums?`<span class="muted">${usd(v)}</span>`:''}<b>${Math.round(v/total*100)}%</b></div>`).join('')}</div></div>`;
 }
@@ -698,7 +710,7 @@ function renderMonthly(){
   $('mf-reset').hidden=!excludedProjects.size;
   const rows=C.monthlyStats(D,{exclude:excludedProjects});
   $('legend-m').innerHTML=legendHTML();
-  $('chart-monthly').innerHTML=chartHTML(rows);
+  $('chart-monthly').innerHTML=chartHTML(rows);scrollChartsToEnd();
   const delay=parseInt(D.settings.expDelay,10)||0;
   $('monthly-info').textContent='Получено — по месяцу поступления · Выставлено — по дате счёта · Расход — часы × ставка записи × курс месяца'+(delay?` (сдвинут на +${delay} мес.)`:'')+' · Профит — получено минус расход. Курс можно поправить прямо в таблице; пустое поле — общий курс. Нажми на проект в строке, чтобы исключить его из расчёта.';
   const T={inv:0,rec:0,exp:0};
