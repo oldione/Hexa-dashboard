@@ -679,7 +679,6 @@ function chartHTML(rows){
   const curve=f=>{const p=rows.map((r,i)=>[x(i),y(f(r))]);let s=`M${p[0][0].toFixed(1)} ${p[0][1].toFixed(1)}`;for(let i=1;i<nn;i++){const m=((p[i-1][0]+p[i][0])/2).toFixed(1);s+=`C${m} ${p[i-1][1].toFixed(1)} ${m} ${p[i][1].toFixed(1)} ${p[i][0].toFixed(1)} ${p[i][1].toFixed(1)}`;}return s;};
   const area=f=>curve(f)+`L${x(nn-1).toFixed(1)} ${y(0).toFixed(1)}L${x(0).toFixed(1)} ${y(0).toFixed(1)}Z`;
   const ticks=[];for(let v=top;v>=bot-1e-9;v-=step) ticks.push(v);
-  const every=Math.max(1,Math.ceil(nn/7));
   const cols=rows.map((r,i)=>{
     const tip=i<nn/2?'left:75%':'right:75%';
     return `<button class="ch-col" aria-label="${r.month}: получено ${usd(r.received)}, выставлено ${usd(r.invoiced)}, расход ${usd(r.expense)}, профит ${usd(prof(r))}">
@@ -705,7 +704,7 @@ function chartHTML(rows){
       </svg>
       <div class="ch-cols" style="grid-template-columns:repeat(${nn},minmax(0,1fr))">${cols}</div>
     </div>
-    <div class="ch-x" aria-hidden="true" style="grid-template-columns:repeat(${nn},minmax(0,1fr))">${rows.map((r,i)=>`<span${i%every===0?'':' class="minor"'}>${r.month}</span>`).join('')}</div></div></div>
+    <div class="ch-x" aria-hidden="true" style="grid-template-columns:repeat(${nn},minmax(0,1fr))">${rows.map((r,i)=>`<span${(nn-1-i)%2===0?'':' class="minor"'}>${r.month}</span>`).join('')}</div></div></div>
   </div>`;
 }
 // На телефоне график листается по горизонтали — показываем сначала последние месяцы

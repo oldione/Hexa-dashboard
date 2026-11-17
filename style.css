@@ -125,9 +125,11 @@ h1,h2,h3{margin:0}
 .legend i{width:12px;height:12px;border-radius:50%;display:inline-block}
 .chart{display:flex;gap:10px}
 .ch-y{height:200px;display:flex;flex-direction:column;justify-content:space-between;font-size:12px;line-height:1;color:var(--muted);text-align:right;margin-top:-6px;padding-bottom:0}
-.ch-scroll{flex:1;min-width:0}
-.ch-body{min-width:0;display:flex;flex-direction:column;gap:8px}
-.ch-x .minor{visibility:hidden}
+.ch-scroll{flex:1;min-width:0;overflow-x:auto;overflow-y:hidden;scrollbar-width:thin;container-type:inline-size}
+/* в окне не больше 12 месяцев, остальное — горизонтальный скролл; меньше 12 — на всю ширину */
+.ch-body{min-width:0;width:max(100%,calc(var(--n) * 100% / 12));display:flex;flex-direction:column;gap:8px}
+/* узкое окно графика (карточка на главной) — подпись через месяц, чтобы не слипались */
+@container (max-width:680px){.ch-x .minor{visibility:hidden}}
 .ch-plot{position:relative}
 .ch-plot svg{display:block;width:100%;height:200px;overflow:visible}
 .ch-cols{position:absolute;inset:0;display:grid}
@@ -377,9 +379,9 @@ h1,h2,h3{margin:0}
 
 /* график на телефоне: ~5 месяцев в окне, остальное — горизонтальный скролл */
 @media (max-width:640px){
-  .ch-scroll{overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;scrollbar-width:thin;padding-bottom:6px;scroll-snap-type:x proximity}
-  .ch-body{width:calc(var(--n) * 100% / 5);padding:0 10px}
-  .ch-x .minor{visibility:visible}
+  .ch-scroll{-webkit-overflow-scrolling:touch;padding-bottom:6px}
+  .ch-body{width:max(100%,calc(var(--n) * 100% / 5));padding:0 10px}
+  .ch-x .minor{visibility:visible!important}
   .ch-y{font-size:11px}
 }
 
