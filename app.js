@@ -293,11 +293,28 @@ function subLine(p){
   if(n(p.refPct)>0) parts.push('реферал '+num(p.refPct)+'%');
   return parts.join(' · ');
 }
+// Кнопки у домена: скопировать в буфер и открыть сайт. Клик не раскрывает проект.
+const ICON_COPY='<svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg>';
+const ICON_OPEN='<svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg>';
+const siteUrl=site=>/^https?:\/\//i.test(site)?site:'https://'+site.replace(/^\/+/,'');
+function siteActions(p){
+  return `<span class="site-acts" onclick="event.stopPropagation()"><button class="sa" title="Скопировать домен" aria-label="Скопировать домен ${escH(p.site)}" onclick="copyDomain(this,'${esc(p.site)}')">${ICON_COPY}</button><a class="sa" href="${escH(siteUrl(p.site))}" target="_blank" rel="noopener noreferrer" title="Открыть сайт" aria-label="Открыть ${escH(p.site)} в новой вкладке">${ICON_OPEN}</a></span>`;
+}
+async function copyDomain(btn,site){
+  let ok=false;
+  try{if(navigator.clipboard&&window.isSecureContext){await navigator.clipboard.writeText(site);ok=true;}}catch(e){}
+  if(!ok){ // запасной путь для http / старых браузеров
+    const t=document.createElement('textarea');t.value=site;t.setAttribute('readonly','');t.style.cssText='position:fixed;opacity:0;top:0;left:0';
+    document.body.appendChild(t);t.select();try{ok=document.execCommand('copy');}catch(e){}t.remove();
+  }
+  if(ok){btn.classList.add('done');setTimeout(()=>btn.classList.remove('done'),1200);toast('Скопировано: '+site);}
+  else toast('Не удалось скопировать');
+}
 function listRow(p){
   const s=stats(p), [tb,tf]=tileOf(p), open=aid===p.id;
   return `<div class="prow${open?' open':''}" data-id="${p.id}" onclick="tog('${p.id}',event)">
     <span class="tile" style="background:${tb};color:${tf}" aria-hidden="true">${escH(p.site.charAt(0).toUpperCase())}</span>
-    <div class="r-name"><span class="r-site">${escH(p.site)}</span><span class="r-sub">${subLine(p)}</span><span class="r-tags">${projectTags(p,s)}</span></div>
+    <div class="r-name"><span class="r-site"><span class="nm">${escH(p.site)}</span>${siteActions(p)}</span><span class="r-sub">${subLine(p)}</span><span class="r-tags">${projectTags(p,s)}</span></div>
     <div class="r-note" onclick="event.stopPropagation()"><textarea class="pnote" data-id="${p.id}" rows="1" placeholder="Заметка…" aria-label="Заметка по ${escH(p.site)}" oninput="noteInput(this)" onblur="saveNote(this)">${escH(p.note)}</textarea></div>
     <span class="r-num"><b>${usd(s.received)}</b><span>${s.invoiced>s.received+0.5?'получено из '+usd(s.invoiced):'получено'}</span></span>
     <span class="r-mid"><span class="cap">${escH(typeName(p)||'без типа')}</span><b>${hrs(s.hours)} ч${s.byPhase.support.hours>0?' · подд. '+hrs(s.byPhase.support.hours):''}</b><span class="st"><i class="dot" style="background:${STATUS_DOT[p.status]||'#CBD5E1'}"></i>${escH(p.status||'без статуса')}</span></span>
@@ -312,7 +329,7 @@ function gridCard(p){
   const s=stats(p), [tb,tf]=tileOf(p), mw=s.received>0?Math.max(0,Math.min(100,s.margin)):0;
   return `<article class="gcard${s.debt>0?' has-debt':''}" onclick="openProject('${p.id}','list')">
     <div class="g-top"><span class="tile" style="background:${tb};color:${tf}" aria-hidden="true">${escH(p.site.charAt(0).toUpperCase())}</span>
-      <div style="min-width:0;display:flex;flex-direction:column;gap:1px"><span class="g-meta">${escH(clientName(p))}${typeName(p)?' · '+escH(typeName(p)):''}</span><span class="g-site">${escH(p.site)}</span></div></div>
+      <div style="min-width:0;display:flex;flex-direction:column;gap:1px"><span class="g-meta">${escH(clientName(p))}${typeName(p)?' · '+escH(typeName(p)):''}</span><span class="g-site"><span class="nm">${escH(p.site)}</span>${siteActions(p)}</span></div></div>
     <div class="g-line"><span class="st"><i class="dot" style="background:${STATUS_DOT[p.status]||'#CBD5E1'};width:10px;height:10px"></i>${escH(p.status||'без статуса')}</span>
       <span style="color:${s.debt>0?'var(--amber)':PAY[s.paymentStatus].fg}">${s.debt>0?'долг '+usd(s.debt):PAY[s.paymentStatus].name}</span>${p.deliveryMonth?`<span class="muted" style="font-weight:600">сдан ${p.deliveryMonth}</span>`:''}</div>
     ${p.note?`<div class="g-note">${escH(p.note)}</div>`:''}
